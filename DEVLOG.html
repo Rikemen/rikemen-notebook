@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>開発ログ - DEVLOG</title>
+  <meta name="description" content="プロジェクトの主な開発ログ。脆弱性対応、デプロイトラブルシューティングなどの記録。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ===== Design System: 水色ベース・ライトテーマ ===== */
+    :root {
+      --color-primary: #0284c7;
+      --color-primary-light: #38bdf8;
+      --color-primary-dark: #0369a1;
+      --color-bg: #f0f9ff;
+      --color-bg-white: #ffffff;
+      --color-text: #0f172a;
+      --color-text-muted: #475569;
+      --color-border: #bae6fd;
+      --color-border-light: #e0f2fe;
+      --color-accent: #0ea5e9;
+      --color-warning-bg: #fffbeb;
+      --color-warning-border: #f59e0b;
+      --color-warning-text: #92400e;
+      --color-info-bg: #eff6ff;
+      --color-info-border: #3b82f6;
+      --color-info-text: #1e40af;
+      --color-error-bg: #fef2f2;
+      --color-error-border: #ef4444;
+      --color-error-text: #991b1b;
+      --color-success-bg: #f0fdf4;
+      --color-success-border: #22c55e;
+      --color-success-text: #166534;
+      --color-code-bg: #f1f5f9;
+      --color-code-border: #cbd5e1;
+      --header-height: 60px;
+      --sidebar-width: 260px;
+      --font-sans: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'Source Code Pro', 'Menlo', monospace;
+      --radius: 8px;
+      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+      --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-bg);
+      color: var(--color-text);
+      line-height: 1.8;
+      font-size: 15px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ===== Header ===== */
+    .header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: var(--header-height);
+      background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      z-index: 1000;
+      box-shadow: 0 2px 8px rgba(2, 132, 199, 0.25);
+    }
+
+    .header__title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .header__badge {
+      margin-left: 12px;
+      font-size: 11px;
+      background: rgba(255, 255, 255, 0.2);
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-weight: 500;
+    }
+
+    .header__hamburger {
+      display: none;
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 24px;
+      cursor: pointer;
+      margin-right: 12px;
+      padding: 4px;
+      line-height: 1;
+    }
+
+    /* ===== Sidebar ===== */
+    .sidebar {
+      position: fixed;
+      top: var(--header-height);
+      left: 0;
+      bottom: 0;
+      width: var(--sidebar-width);
+      background: var(--color-bg-white);
+      border-right: 1px solid var(--color-border-light);
+      overflow-y: auto;
+      padding: 20px 0;
+      z-index: 900;
+      transition: transform 0.3s ease;
+    }
+
+    .sidebar__heading {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--color-text-muted);
+      padding: 0 20px;
+      margin-bottom: 12px;
+    }
+
+    .sidebar__nav {
+      list-style: none;
+    }
+
+    .sidebar__nav li a {
+      display: block;
+      padding: 8px 20px;
+      color: var(--color-text-muted);
+      text-decoration: none;
+      font-size: 13.5px;
+      font-weight: 500;
+      border-left: 3px solid transparent;
+      transition: all 0.2s ease;
+    }
+
+    .sidebar__nav li a:hover {
+      color: var(--color-primary);
+      background: var(--color-bg);
+      border-left-color: var(--color-primary-light);
+    }
+
+    .sidebar__nav li.sub a {
+      padding-left: 36px;
+      font-size: 12.5px;
+      font-weight: 400;
+    }
+
+    .sidebar__overlay {
+      display: none;
+      position: fixed;
+      top: var(--header-height);
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.3);
+      z-index: 899;
+    }
+
+    /* ===== Main Content ===== */
+    .main {
+      margin-left: var(--sidebar-width);
+      margin-top: var(--header-height);
+      min-height: calc(100vh - var(--header-height));
+      padding: 32px 40px 60px;
+      max-width: 900px;
+    }
+
+    /* ===== Hero Banner ===== */
+    .hero-banner {
+      background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent) 50%, var(--color-primary-light) 100%);
+      color: #fff;
+      padding: 40px 36px;
+      border-radius: var(--radius);
+      margin-bottom: 32px;
+      box-shadow: var(--shadow-md);
+    }
+
+    .hero-banner h1 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .hero-banner p {
+      font-size: 15px;
+      opacity: 0.9;
+      line-height: 1.7;
+    }
+
+    /* ===== Section ===== */
+    .doc-section {
+      background: var(--color-bg-white);
+      border: 1px solid var(--color-border-light);
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      margin-bottom: 24px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .doc-section h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--color-primary-dark);
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid var(--color-border);
+    }
+
+    .section-icon {
+      margin-right: 8px;
+    }
+
+    .doc-section h3 {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--color-text);
+      margin: 24px 0 12px;
+    }
+
+    .doc-section h3:first-of-type {
+      margin-top: 0;
+    }
+
+    .doc-section p {
+      margin-bottom: 12px;
+      color: var(--color-text);
+    }
+
+    .doc-section ul,
+    .doc-section ol {
+      margin: 8px 0 16px 24px;
+    }
+
+    .doc-section li {
+      margin-bottom: 6px;
+    }
+
+    .doc-section a {
+      color: var(--color-primary);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.2s;
+    }
+
+    .doc-section a:hover {
+      border-bottom-color: var(--color-primary);
+    }
+
+    .doc-section hr {
+      border: none;
+      border-top: 1px solid var(--color-border-light);
+      margin: 24px 0;
+    }
+
+    /* ===== Callout ===== */
+    .callout {
+      border-left: 4px solid;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      padding: 16px 20px;
+      margin: 16px 0;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .callout.info {
+      background: var(--color-info-bg);
+      border-color: var(--color-info-border);
+      color: var(--color-info-text);
+    }
+
+    .callout.warning {
+      background: var(--color-warning-bg);
+      border-color: var(--color-warning-border);
+      color: var(--color-warning-text);
+    }
+
+    .callout.error {
+      background: var(--color-error-bg);
+      border-color: var(--color-error-border);
+      color: var(--color-error-text);
+    }
+
+    .callout.success {
+      background: var(--color-success-bg);
+      border-color: var(--color-success-border);
+      color: var(--color-success-text);
+    }
+
+    .callout code {
+      background: rgba(0, 0, 0, 0.06);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+    }
+
+    /* ===== Code ===== */
+    code {
+      font-family: var(--font-mono);
+      font-size: 13.5px;
+      background: var(--color-code-bg);
+      border: 1px solid var(--color-code-border);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--color-primary-dark);
+    }
+
+    pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      border-radius: var(--radius);
+      padding: 18px 22px;
+      margin: 12px 0 16px;
+      overflow-x: auto;
+      box-shadow: var(--shadow-sm);
+      line-height: 1.6;
+    }
+
+    pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      color: inherit;
+      font-size: 13px;
+    }
+
+    /* ===== Log Entry ===== */
+    .log-date {
+      display: inline-block;
+      background: var(--color-primary);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 3px 14px;
+      border-radius: 14px;
+      margin-bottom: 8px;
+      letter-spacing: 0.03em;
+    }
+
+    .log-label {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 10px;
+      border-radius: 10px;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+
+    .log-label.incident {
+      background: var(--color-error-bg);
+      color: var(--color-error-text);
+      border: 1px solid var(--color-error-border);
+    }
+
+    .log-label.fix {
+      background: var(--color-success-bg);
+      color: var(--color-success-text);
+      border: 1px solid var(--color-success-border);
+    }
+
+    .log-label.note {
+      background: var(--color-info-bg);
+      color: var(--color-info-text);
+      border: 1px solid var(--color-info-border);
+    }
+
+    .detail-item {
+      margin-bottom: 14px;
+    }
+
+    .detail-item strong {
+      color: var(--color-primary-dark);
+    }
+
+    /* ===== Footer ===== */
+    .footer {
+      margin-left: var(--sidebar-width);
+      padding: 20px 40px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--color-text-muted);
+      border-top: 1px solid var(--color-border-light);
+    }
+
+    /* ===== Responsive (860px以下) ===== */
+    @media (max-width: 860px) {
+      .header__hamburger {
+        display: block;
+      }
+
+      .sidebar {
+        transform: translateX(-100%);
+      }
+
+      .sidebar.open {
+        transform: translateX(0);
+        box-shadow: var(--shadow-md);
+      }
+
+      .sidebar__overlay.open {
+        display: block;
+      }
+
+      .main {
+        margin-left: 0;
+        padding: 24px 20px 40px;
+      }
+
+      .footer {
+        margin-left: 0;
+      }
+
+      .hero-banner {
+        padding: 28px 24px;
+      }
+
+      .hero-banner h1 {
+        font-size: 22px;
+      }
+
+      .doc-section {
+        padding: 20px 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ===== Header ===== -->
+  <header class="header">
+    <button class="header__hamburger" id="hamburger" aria-label="メニューを開く">☰</button>
+    <span class="header__title">開発ログ</span>
+    <span class="header__badge">DEVLOG</span>
+  </header>
+
+  <!-- ===== Sidebar ===== -->
+  <div class="sidebar__overlay" id="overlay"></div>
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar__heading">目次</div>
+    <ul class="sidebar__nav">
+      <li><a href="#sec-20260603">2026-06-03</a></li>
+      <li class="sub"><a href="#sec-20260603-functions">Cloud Functions 権限エラー</a></li>
+      <li><a href="#sec-20260423">2026-04-23</a></li>
+      <li class="sub"><a href="#sec-20260423-audit">npm audit 脆弱性対応</a></li>
+      <li class="sub"><a href="#sec-20260423-task">開発タスク</a></li>
+    </ul>
+  </nav>
+
+  <!-- ===== Main Content ===== -->
+  <main class="main">
+
+    <!-- Hero Banner -->
+    <div class="hero-banner">
+      <h1>開発ログ</h1>
+      <p>このキットに対しての主な開発ログをこのファイルに記録します。</p>
+      <p>※ 詳細は各コミット参照</p>
+    </div>
+
+    <!-- 2026-06-03 -->
+    <section class="doc-section" id="sec-20260603">
+      <h2><span class="section-icon">📅</span>2026-06-03</h2>
+
+      <h3 id="sec-20260603-functions"><span class="log-label incident">トラブルシュート</span> Cloud Functions（第2世代）デプロイ時の権限エラー対応</h3>
+
+      <div class="detail-item">
+        <strong>事象:</strong>
+        <p><code>firebase deploy</code> で Cloud Functions（第2世代）をデプロイした際、<code>missing permission on the build service account.</code> というエラーでビルドが失敗した。</p>
+      </div>
+
+      <div class="detail-item">
+        <strong>原因:</strong>
+        <p>Cloud Functions（第2世代）のコンテナビルド処理は、デフォルトで <strong>Compute Engine デフォルトサービスアカウント</strong> (<code>[プロジェクト番号]-compute@developer.gserviceaccount.com</code>) が使用される仕様になっているが、このアカウントに適切な権限が付与されていなかった。</p>
+      </div>
+
+      <div class="callout warning">
+        <strong>⚠️ ハマりポイント:</strong>
+        <ul style="margin-top: 8px;">
+          <li>エラー名から旧来のビルドサービスアカウント（<code>@cloudbuild.gserviceaccount.com</code>）に権限を付与してしまい、空振りした。</li>
+          <li>IAM画面のリストに Compute Engine デフォルトアカウントが表示されていなかった。過去に権限がすべて削除されており、IAMの「権限を持つアカウント一覧」から消えていたのが原因。</li>
+        </ul>
+      </div>
+
+      <div class="detail-item">
+        <strong>対応:</strong>
+        <p>Google Cloud コンソールの「IAM と管理」&gt;「IAM」画面の「＋ アクセス権を付与」から、「新しいプリンシパル」として <code>[プロジェクト番号]-compute@developer.gserviceaccount.com</code> を直接手入力で追加し、必要なロール（<code>編集者</code> や <code>Artifact Registry 作成者</code> 等）を付与。これによりビルドプロセスが許可され、デプロイに成功した。</p>
+      </div>
+    </section>
+
+    <!-- 2026-04-23 -->
+    <section class="doc-section" id="sec-20260423">
+      <h2><span class="section-icon">📅</span>2026-04-23</h2>
+
+      <h3 id="sec-20260423-audit"><span class="log-label fix">修正</span> npm audit 脆弱性対応</h3>
+
+      <p><code>npm install</code> 時に high severity × 2 の脆弱性が報告された。</p>
+
+      <ul>
+        <li><strong>原因:</strong> <code>eslint-plugin-sonarjs</code>（v3系）が依存する <code>minimatch</code> 10.0.0–10.2.2 に ReDoS 脆弱性（GHSA-3ppc-4f35-3m26, GHSA-7r86-cg39-jmmj, GHSA-23c5-xmqv-rm74）</li>
+        <li><strong>対応:</strong> <code>eslint-plugin-sonarjs</code> を v3 → v4（latest）にメジャーバージョンアップ</li>
+        <li><strong>コマンド:</strong> <code>npm install -D eslint-plugin-sonarjs@latest</code></li>
+        <li><strong>結果:</strong> <code>npm audit</code> で <code>found 0 vulnerabilities</code> を確認</li>
+        <li><strong>備考:</strong> 開発時ツール（ESLint プラグイン）の間接依存であり、本番ビルドへの影響はなし</li>
+      </ul>
+
+      <h3 id="sec-20260423-task"><span class="log-label note">メモ</span> 開発タスク</h3>
+
+      <p>github issuesで今後のこのスターターに対する開発課題は管理します。</p>
+    </section>
+
+  </main>
+
+  <!-- ===== Footer ===== -->
+  <footer class="footer">
+    <p>Generated from DEVLOG.md — 水色ベースデザインシステム</p>
+  </footer>
+
+  <!-- ===== Mobile Menu Script ===== -->
+  <script>
+    const hamburger = document.getElementById('hamburger');
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('overlay');
+
+    hamburger.addEventListener('click', () => {
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('open');
+    });
+
+    overlay.addEventListener('click', () => {
+      sidebar.classList.remove('open');
+      overlay.classList.remove('open');
+    });
+
+    // サイドバーリンククリックでモバイルメニューを閉じる
+    document.querySelectorAll('.sidebar__nav a').forEach(link => {
+      link.addEventListener('click', () => {
+        if (window.innerWidth <= 860) {
+          sidebar.classList.remove('open');
+          overlay.classList.remove('open');
+        }
+      });
+    });
+  </script>
+
+</body>
+</html>

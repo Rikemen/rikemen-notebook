@@ -1,0 +1,16 @@
+{
+  "projects": {
+    "default": "your-project-id",
+    "demo": "your-project-id"
+  },
+  "targets": {
+    "your-project-id": {
+      "hosting": {
+        "app": [
+          "your-project-id"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Project Name - README</title>
+  <meta name="description" content="Vue 3 + Firebase ベースのウェブアプリケーション スターターキット。セットアップ手順、Functions、i18n、デプロイ方法などを解説。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ===== Design System: 水色ベース・ライトテーマ ===== */
+    :root {
+      --color-primary: #0284c7;
+      --color-primary-light: #38bdf8;
+      --color-primary-dark: #0369a1;
+      --color-bg: #f0f9ff;
+      --color-bg-white: #ffffff;
+      --color-text: #0f172a;
+      --color-text-muted: #475569;
+      --color-border: #bae6fd;
+      --color-border-light: #e0f2fe;
+      --color-accent: #0ea5e9;
+      --color-warning-bg: #fffbeb;
+      --color-warning-border: #f59e0b;
+      --color-warning-text: #92400e;
+      --color-info-bg: #eff6ff;
+      --color-info-border: #3b82f6;
+      --color-info-text: #1e40af;
+      --color-code-bg: #f1f5f9;
+      --color-code-border: #cbd5e1;
+      --header-height: 60px;
+      --sidebar-width: 260px;
+      --font-sans: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'Source Code Pro', 'Menlo', monospace;
+      --radius: 8px;
+      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+      --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-bg);
+      color: var(--color-text);
+      line-height: 1.8;
+      font-size: 15px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ===== Header ===== */
+    .header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: var(--header-height);
+      background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      z-index: 1000;
+      box-shadow: 0 2px 8px rgba(2, 132, 199, 0.25);
+    }
+
+    .header__title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .header__badge {
+      margin-left: 12px;
+      font-size: 11px;
+      background: rgba(255, 255, 255, 0.2);
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-weight: 500;
+    }
+
+    .header__hamburger {
+      display: none;
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 24px;
+      cursor: pointer;
+      margin-right: 12px;
+      padding: 4px;
+      line-height: 1;
+    }
+
+    /* ===== Sidebar ===== */
+    .sidebar {
+      position: fixed;
+      top: var(--header-height);
+      left: 0;
+      bottom: 0;
+      width: var(--sidebar-width);
+      background: var(--color-bg-white);
+      border-right: 1px solid var(--color-border-light);
+      overflow-y: auto;
+      padding: 20px 0;
+      z-index: 900;
+      transition: transform 0.3s ease;
+    }
+
+    .sidebar__heading {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--color-text-muted);
+      padding: 0 20px;
+      margin-bottom: 12px;
+    }
+
+    .sidebar__nav {
+      list-style: none;
+    }
+
+    .sidebar__nav li a {
+      display: block;
+      padding: 8px 20px;
+      color: var(--color-text-muted);
+      text-decoration: none;
+      font-size: 13.5px;
+      font-weight: 500;
+      border-left: 3px solid transparent;
+      transition: all 0.2s ease;
+    }
+
+    .sidebar__nav li a:hover {
+      color: var(--color-primary);
+      background: var(--color-bg);
+      border-left-color: var(--color-primary-light);
+    }
+
+    .sidebar__nav li.sub a {
+      padding-left: 36px;
+      font-size: 12.5px;
+      font-weight: 400;
+    }
+
+    .sidebar__overlay {
+      display: none;
+      position: fixed;
+      top: var(--header-height);
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.3);
+      z-index: 899;
+    }
+
+    /* ===== Main Content ===== */
+    .main {
+      margin-left: var(--sidebar-width);
+      margin-top: var(--header-height);
+      min-height: calc(100vh - var(--header-height));
+      padding: 32px 40px 60px;
+      max-width: 900px;
+    }
+
+    /* ===== Hero Banner ===== */
+    .hero-banner {
+      background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent) 50%, var(--color-primary-light) 100%);
+      color: #fff;
+      padding: 40px 36px;
+      border-radius: var(--radius);
+      margin-bottom: 32px;
+      box-shadow: var(--shadow-md);
+    }
+
+    .hero-banner h1 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .hero-banner p {
+      font-size: 15px;
+      opacity: 0.9;
+      line-height: 1.7;
+    }
+
+    /* ===== Section ===== */
+    .doc-section {
+      background: var(--color-bg-white);
+      border: 1px solid var(--color-border-light);
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      margin-bottom: 24px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .doc-section h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--color-primary-dark);
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid var(--color-border);
+    }
+
+    .section-icon {
+      margin-right: 8px;
+    }
+
+    .doc-section h3 {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--color-text);
+      margin: 24px 0 12px;
+    }
+
+    .doc-section h4 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--color-text-muted);
+      margin: 20px 0 8px;
+    }
+
+    .doc-section p {
+      margin-bottom: 12px;
+      color: var(--color-text);
+    }
+
+    .doc-section ul,
+    .doc-section ol {
+      margin: 8px 0 16px 24px;
+    }
+
+    .doc-section li {
+      margin-bottom: 6px;
+    }
+
+    .doc-section a {
+      color: var(--color-primary);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.2s;
+    }
+
+    .doc-section a:hover {
+      border-bottom-color: var(--color-primary);
+    }
+
+    .doc-section hr {
+      border: none;
+      border-top: 1px solid var(--color-border-light);
+      margin: 24px 0;
+    }
+
+    /* ===== Callout ===== */
+    .callout {
+      border-left: 4px solid;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      padding: 16px 20px;
+      margin: 16px 0;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .callout.info {
+      background: var(--color-info-bg);
+      border-color: var(--color-info-border);
+      color: var(--color-info-text);
+    }
+
+    .callout.warning {
+      background: var(--color-warning-bg);
+      border-color: var(--color-warning-border);
+      color: var(--color-warning-text);
+    }
+
+    .callout code {
+      background: rgba(0, 0, 0, 0.06);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+    }
+
+    /* ===== Code ===== */
+    code {
+      font-family: var(--font-mono);
+      font-size: 13.5px;
+      background: var(--color-code-bg);
+      border: 1px solid var(--color-code-border);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--color-primary-dark);
+    }
+
+    pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      border-radius: var(--radius);
+      padding: 18px 22px;
+      margin: 12px 0 16px;
+      overflow-x: auto;
+      box-shadow: var(--shadow-sm);
+      line-height: 1.6;
+    }
+
+    pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      color: inherit;
+      font-size: 13px;
+    }
+
+    /* ===== Table ===== */
+    .table-wrap {
+      overflow-x: auto;
+      margin: 12px 0 16px;
+    }
+
+    .table-wrap table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    .table-wrap th {
+      background: var(--color-bg);
+      font-weight: 700;
+      text-align: left;
+      padding: 10px 14px;
+      border: 1px solid var(--color-border);
+      color: var(--color-primary-dark);
+    }
+
+    .table-wrap td {
+      padding: 10px 14px;
+      border: 1px solid var(--color-border-light);
+    }
+
+    /* ===== Footer ===== */
+    .footer {
+      margin-left: var(--sidebar-width);
+      padding: 20px 40px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--color-text-muted);
+      border-top: 1px solid var(--color-border-light);
+    }
+
+    /* ===== Responsive (860px以下) ===== */
+    @media (max-width: 860px) {
+      .header__hamburger {
+        display: block;
+      }
+
+      .sidebar {
+        transform: translateX(-100%);
+      }
+
+      .sidebar.open {
+        transform: translateX(0);
+        box-shadow: var(--shadow-md);
+      }
+
+      .sidebar__overlay.open {
+        display: block;
+      }
+
+      .main {
+        margin-left: 0;
+        padding: 24px 20px 40px;
+      }
+
+      .footer {
+        margin-left: 0;
+      }
+
+      .hero-banner {
+        padding: 28px 24px;
+      }
+
+      .hero-banner h1 {
+        font-size: 22px;
+      }
+
+      .doc-section {
+        padding: 20px 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ===== Header ===== -->
+  <header class="header">
+    <button class="header__hamburger" id="hamburger" aria-label="メニューを開く">☰</button>
+    <span class="header__title">Your Project Name</span>
+    <span class="header__badge">README</span>
+  </header>
+
+  <!-- ===== Sidebar ===== -->
+  <div class="sidebar__overlay" id="overlay"></div>
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar__heading">目次</div>
+    <ul class="sidebar__nav">
+      <li><a href="#sec-overview">プロジェクト概要</a></li>
+      <li><a href="#sec-requirements">📋 要件</a></li>
+      <li><a href="#sec-setup">📖 初期セットアップ手順</a></li>
+      <li><a href="#sec-dev">開発環境の立ち上げ</a></li>
+      <li><a href="#sec-functions">💻 Functions</a></li>
+      <li class="sub"><a href="#sec-functions-side">Functions側</a></li>
+      <li class="sub"><a href="#sec-vuejs-side">Vue.js側</a></li>
+      <li class="sub"><a href="#sec-region">リージョン</a></li>
+      <li><a href="#sec-i18n">🌎 i18n</a></li>
+      <li><a href="#sec-scripts">📄 利用可能なスクリプト</a></li>
+      <li><a href="#sec-mock">UI モック</a></li>
+      <li class="sub"><a href="#sec-multisite">Hostingのマルチサイト機能</a></li>
+      <li><a href="#sec-env">ローカル・ステージング・本番環境</a></li>
+      <li><a href="#sec-tips">その他Tips</a></li>
+    </ul>
+  </nav>
+
+  <!-- ===== Main Content ===== -->
+  <main class="main">
+
+    <!-- Hero Banner (# H1) -->
+    <div class="hero-banner">
+      <h1>Your Project Name</h1>
+      <p>このプロジェクトは、Your Project Nameのウェブアプリケーションです。Vue 3およびFirebaseをベースに構築されています。</p>
+      <p>スターターキット自体の更新手順は「CONTRIBUTING.md」を参照してください。</p>
+    </div>
+
+    <!-- プロジェクト概要 -->
+    <section class="doc-section" id="sec-overview">
+      <h2><span class="section-icon">📌</span>プロジェクト概要</h2>
+      <ul>
+        <li>[アプリの目的を記載]を行うためのアプリとして機能します。</li>
+        <li>Vue 3, Vite, Tailwind CSS, Piniaを利用したモダンなフロントエンド環境を採用しています。</li>
+        <li>バックエンド・インフラにはFirebase（Firestore, Functions, Hosting）を利用しています。</li>
+      </ul>
+      <div class="callout info">
+        <strong>ベースキット:</strong> このプロジェクトは、Vue3とFirebaseを使用するウェブプロジェクト向けスタートアップキット（<code>firebase-vue3-startup-kit</code>）をベースに構築されています。vite、vue-router、pinia、tailwindcss、prettier、vue-tscが含まれています。
+      </div>
+    </section>
+
+    <!-- 要件 -->
+    <section class="doc-section" id="sec-requirements">
+      <h2><span class="section-icon">📋</span>要件</h2>
+      <ul>
+        <li>Node.js バージョン 22（LTS推奨）。</li>
+      </ul>
+      <div class="callout warning">
+        <strong>⚠️ Firebase 料金プランに関する注意:</strong><br><br>
+        このキットには Cloud Firestore と Cloud Functions の設定が含まれています。Spark（無料）プランでは、Firestore を有効化した状態で Cloud Functions をデプロイすることができません。Functions を使用する場合は <strong>Blaze（従量課金）プラン</strong> へのアップグレードが必要です。<br><br>
+        Firestore を使用しない場合は、<code>firebase.json</code> から以下の <code>firestore</code> セクションを削除し、関連ファイル（<code>firestore.rules</code>, <code>firestore.indexes.json</code>）も不要であれば削除してください。
+        <pre><code>// firebase.json から以下を削除
+"firestore": {
+  "rules": "firestore.rules",
+  "indexes": "firestore.indexes.json"
+},</code></pre>
+      </div>
+    </section>
+
+    <!-- 初期セットアップ手順 -->
+    <section class="doc-section" id="sec-setup">
+      <h2><span class="section-icon">📖</span>初期セットアップ手順</h2>
+      <div class="callout info">
+        <strong>💡 stg / prod 環境分離について:</strong><br><br>
+        使い捨てではない本格的なアプリを開発する場合、<strong>最初に作成するGitHubリポジトリとFirebaseプロジェクトはステージング（stg）用</strong>として構成してください。本番（prod）用のリポジトリやFirebaseプロジェクトは、開発がある程度進んだ段階で別途作成します。最初からstgとして始めておくことで、後からprod環境を追加する際にスムーズに移行できます。環境分離の詳細は「<a href="#sec-env">ローカル・ステージング・本番環境について</a>」を参照してください。
+      </div>
+      <ol>
+        <li>このリポジトリ（スターターキット）をGitクローンします。
+          <pre><code>git clone https://github.com/&lt;ベースキットのリポジトリURL&gt;.git &lt;your-project-name&gt;
+cd &lt;your-project-name&gt;</code></pre>
+        </li>
+        <li>Gitリモートの向き先を自分のリポジトリに変更します。
+          <ul>
+            <li>まず、GitHub上に新しいリポジトリを作成してください（stg/prod分離する場合は、リポジトリ名に <code>-stg</code> を付けるなどしてstg用と分かるようにしておくと管理しやすくなります）。</li>
+            <li>クローン元（スターターキット）のoriginを <code>upstream</code> にリネームし、自分のリポジトリを新たな <code>origin</code> として設定します。</li>
+          </ul>
+          <pre><code># 現在のoriginをupstreamにリネーム（ベースキットの更新を取り込みたい場合に残す）
+git remote rename origin upstream
+# 自分のリポジトリをoriginとして追加
+git remote add origin https://github.com/&lt;your-username&gt;/&lt;your-repo-name&gt;.git
+# 自分のリポジトリにプッシュ
+git push -u origin main</code></pre>
+          <ul>
+            <li>ベースキットの更新を今後取り込む必要がない場合は、<code>upstream</code> を削除しても構いません。
+              <pre><code>git remote remove upstream</code></pre>
+            </li>
+            <li>設定後、<code>git remote -v</code> で向き先が正しいことを確認してください。</li>
+          </ul>
+        </li>
+        <li><code>npm install -g firebase-tools</code> を実行して、Firebase toolsをインストールします。</li>
+        <li>必要なnodeモジュールを取得するため、<code>npm install</code> を一度実行します。</li>
+        <li><code>functions</code> ディレクトリ内でも <code>npm install</code> を一度実行します。</li>
+        <li>Firebaseコンソール (<a href="https://firebase.google.com" target="_blank">https://firebase.google.com</a> から) を開き、プロジェクトを追加します（stg/prod分離する場合は、プロジェクト名に <code>-stg</code> を含めてステージング用として作成してください）。
+          <ul>
+            <li>Firebase CLI でログインしていることを確認してください。<code>firebase login</code> を実行して、Google アカウントでログインします。</li>
+            <li>CLIでのfirebase initは不要です(このキット自体が初期設定を代行しているため)</li>
+            <li>CLIでの<code>firebase use --add</code> でプロジェクトを追加し、その後 <code>firebase use</code> でプロジェクトを選択することは必要です。</li>
+          </ul>
+        </li>
+        <li>このプロジェクトのダッシュボードから、アプリを追加し「ウェブ」 (<code>&lt;/&gt;</code>) を選択します。</li>
+        <li>このアプリの設定から、「Config」を選択します（Firebase SDKスニペット内）。</li>
+        <li>設定ファイルをコピーし、<code>src/config/project.ts</code> ファイルに貼り付けます。</li>
+        <li><code>.firebaserc</code> ファイル内の <code>fir-vue-startup-kit</code> という単語を、あなたのFirebaseプロジェクト名に置き換えます。</li>
+        <li>Firebaseコンソールを開き、Cloud Firestoreを作成します（とりあえず「セキュア」にしておきます）。</li>
+        <li>FirebaseコンソールでFirebase Hostingを有効にします。</li>
+      </ol>
+    </section>
+
+    <!-- 開発環境の立ち上げ -->
+    <section class="doc-section" id="sec-dev">
+      <h2><span class="section-icon">🚀</span>開発環境の立ち上げ</h2>
+      <p>1. パッケージのインストール</p>
+      <pre><code>npm install
+cd functions &amp;&amp; npm install &amp;&amp; cd ..</code></pre>
+      <p>2. ローカルサーバーの起動</p>
+      <pre><code>npm run serve</code></pre>
+      <p><a href="http://localhost:8080" target="_blank">http://localhost:8080</a> でブラウザからアクセスできます。</p>
+    </section>
+
+    <!-- Functions -->
+    <section class="doc-section" id="sec-functions">
+      <h2><span class="section-icon">💻</span>Functions</h2>
+      <p>デフォルト設定のコールドスタートの場合、Firebase Functionsは非常に遅いため、このスタートアップキットは少しカスタムされたFirebase Functionsとなっています。</p>
+
+      <h3 id="sec-functions-side">Functions側</h3>
+      <ul>
+        <li>Functionsはラッパー関数（<code>functions/src/common/exportifneeded.ts</code> の <code>exportIfNeeded</code> 関数）を使用して呼び出されます。必要な関数のみを読み込みます。</li>
+        <li>Functionsは十分なメモリで起動します。<code>functions/src/wrappers/tests/test.ts</code> にある <code>test</code> 関数は1GBのメモリで実行されます。</li>
+        <li>Functionsは近くのリージョンで実行されます。デフォルトでは日本リージョンに設定されています。</li>
+      </ul>
+      <p>このため、Functionsは少し特殊な使い方をされています。<br>
+      クライアントから呼び出されるFunctionsは、<code>src/index.ts</code> に <code>exportIfNeeded ("test", "tests/test", exports);</code> のように書かれます。</p>
+      <p>この場合、クライアントは <code>test</code> を関数として呼び出します。そしてクライアントが <code>test</code> Functionを呼び出すと、<code>functions/src/wrappers/tests/test.ts</code> 内のデフォルト関数が呼び出されます。詳細についてはこのファイルを参照してください。</p>
+
+      <h3 id="sec-vuejs-side">Vue.js側</h3>
+      <ul>
+        <li>関数設定は <code>src/utils/firebase.ts</code> にあります。デフォルトでは、<code>asia-northeast1</code> (東京) リージョンを呼び出すように設定されています。</li>
+        <li>すべての機能は <code>src/utils/functions.ts</code> にまとめられています。新しい関数はこのファイルに追加する必要があります。</li>
+      </ul>
+
+      <h3 id="sec-region">リージョン</h3>
+      <p>Functionsのリージョンは <code>asia-northeast1</code> (東京) に設定されています。リージョンを変更する場合は、必ずFunctions側とVue.js側の両方を変更してください。</p>
+    </section>
+
+    <!-- i18n -->
+    <section class="doc-section" id="sec-i18n">
+      <h2><span class="section-icon">🌎</span>i18n</h2>
+      <ul>
+        <li>このスタートアップキットは、URLパスを使用したi18nをサポートしています。</li>
+        <li><code>/en/index</code> と <code>/jp/index</code> の両方で1つのVueファイルを使用できます。</li>
+        <li>言語ファイルは <code>src/i18n/</code> ディレクトリにあります。
+          <ul>
+            <li><code>en.ts</code> と <code>ja.ts</code> が言語ファイルです。</li>
+            <li>言語切り替えプルダウン（セレクト）に使用される言語ファイルは <code>language.ts</code> です。同じファイルが <code>en.ts</code> と <code>ja.ts</code> から読み込まれます。それぞれの言語で記述してください。</li>
+            <li>新しい言語を追加したい場合は、<code>index.ts</code> に言語を追加し、<code>{language}.ts</code> を追加し、<code>language.ts</code> に言語を追加します。</li>
+          </ul>
+        </li>
+        <li>URLパスで言語を切り替える方法については、<code>src/router/index.ts</code> も参照してください。</li>
+        <li><code>src/components/Languages.vue</code> にある言語切り替えプルダウンを使用できます。このファイルは <code>route.param.lang</code> を読み込む必要があるため、<code>App.vue</code> と <code>Layout.vue</code> では使用しないでください。それ以外の場所ではどこでも使用できます。</li>
+        <li>i18nは <code>vue-i18n@next</code> を使用しているため、使用方法の詳細についてはそちらを参照してください。</li>
+      </ul>
+    </section>
+
+    <!-- 利用可能なスクリプト -->
+    <section class="doc-section" id="sec-scripts">
+      <h2><span class="section-icon">📄</span>利用可能なスクリプト</h2>
+      <p>プロジェクトディレクトリで、以下を実行できます：</p>
+
+      <h3><code>npm run serve</code></h3>
+      <p>開発モードでアプリを実行します。<br>
+      ブラウザで表示するには <a href="http://localhost:8080" target="_blank">http://localhost:8080</a> を開いてください。</p>
+      <p>編集するとページがリロードされます。<br>
+      コンソールにはLintエラーも表示されます。</p>
+
+      <h3><code>npm run build</code></h3>
+      <p>本番環境用にアプリを <code>dist</code> フォルダにビルドします。<br>
+      本番モードのVueを正しくバンドルし、最高のパフォーマンスが得られるようにビルドを最適化します。</p>
+      <p>ビルドは最小化され、ファイル名にはハッシュが含まれます。<br>
+      これでアプリのデプロイ準備は完了です！</p>
+
+      <h3><code>firebase deploy</code></h3>
+      <p>Firebaseクラウドにアプリをデプロイします。デプロイの前に <code>npm run build</code> を実行する必要があります。</p>
+      <p><strong>モックサイトのみをデプロイする場合:</strong></p>
+      <pre><code>firebase deploy --only hosting:mock</code></pre>
+
+      <h3><code>npm run format</code></h3>
+      <p>Prettierを実行し、コードフォーマットとしてコードを書き換えます。</p>
+    </section>
+
+    <!-- UI モック -->
+    <section class="doc-section" id="sec-mock">
+      <h2><span class="section-icon">🎨</span>UI モック (Design Mockups)</h2>
+      <p>システムデザインの検討および要件定義のため、<code>system-design/mock/</code> ディレクトリにHTML/CSSベースのUIモックを構築しています。これらはFirebase Hostingのマルチサイト機能を利用して公開することが可能です。</p>
+
+      <h3 id="sec-multisite">Hostingのマルチサイト機能の使い方</h3>
+      <p>Firebase Hostingで複数のサイト（例: ユーザー向けサイト、キオスク向けサイトなど）を個別に管理・デプロイするには、以下の手順でマルチサイト設定とターゲットの登録を行います。</p>
+
+      <h4>1. サイトの作成</h4>
+      <p>Firebase CLIを使用して、新しいHostingサイトを作成します。</p>
+      <pre><code>firebase hosting:sites:create &lt;YOUR_SITE_ID&gt;</code></pre>
+      <p>※ <code>&lt;YOUR_SITE_ID&gt;</code> には一意のサイト名（例: <code>mock-your-project-id</code>）を指定します。作成したサイトのURLは <code>https://&lt;YOUR_SITE_ID&gt;.web.app</code> になります。</p>
+
+      <h4>2. デプロイターゲットの適用</h4>
+      <p>作成したサイトを、プロジェクト内のターゲット名（<code>firebase.json</code> で指定しているエイリアス名）に紐付けます。</p>
+      <pre><code>firebase target:apply hosting &lt;TARGET_NAME&gt; &lt;YOUR_SITE_ID&gt;</code></pre>
+      <ul>
+        <li><code>&lt;TARGET_NAME&gt;</code>: <code>firebase.json</code> 内で設定する識別子（例: <code>mock</code> など）。</li>
+        <li><code>&lt;YOUR_SITE_ID&gt;</code>: 手順1で作成したサイトID。</li>
+      </ul>
+      <p><strong>実行例:</strong></p>
+      <pre><code># mockターゲットを mock-your-project-id サイトに紐付ける場合
+firebase target:apply hosting mock mock-your-project-id</code></pre>
+      <p>この操作を行うと、プロジェクトルートの <code>.firebaserc</code> にターゲット情報が自動的に保存されます。</p>
+
+      <h4>3. 設定ファイルの構成（参考）</h4>
+      <p><code>firebase.json</code> で複数のターゲットを配列で定義します。（すでに設定されている場合は変更不要です）</p>
+      <pre><code>{
+  "hosting": [
+    {
+      "target": "mock",
+      "public": "system-design/mock",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
+    }
+  ]
+}</code></pre>
+      <p>設定完了後、指定したターゲットのみを選択してデプロイすることが可能になります。</p>
+      <pre><code>firebase deploy --only hosting:mock</code></pre>
+    </section>
+
+    <!-- ローカル・ステージング・本番環境 -->
+    <section class="doc-section" id="sec-env">
+      <h2><span class="section-icon">🔄</span>ローカル・ステージング・本番環境について（個人開発を想定）</h2>
+      <ul>
+        <li>開発初期 : ローカルのみ or ローカルとステージングで開発する</li>
+        <li>開発中盤 : ローカル・ステージング</li>
+        <li>開発終盤 : ローカル・ステージング・本番環境で開発する</li>
+      </ul>
+    </section>
+
+    <!-- その他Tips -->
+    <section class="doc-section" id="sec-tips">
+      <h2><span class="section-icon">💡</span>その他Tips</h2>
+      <ul>
+        <li>コンテナ保存期間をfirebaseデプロイ時にCLIで聞かれた時は基本はデフォルトの1日でOK</li>
+        <li>firebase deployの際にhono serverだけ再度デプロイするとうまく行く場合がある(権限付与される前に内部的に先にデプロイが走ってしまうことがあるそう)</li>
+      </ul>
+      <div class="callout info">
+        <strong>📝 開発ログ:</strong> 開発中にハマったポイントやトラブルシューティングの詳細は <code>DEVLOG.md</code>（または <code>DEVLOG.html</code>）に記録しています。問題に遭遇した際は、まずそちらを確認してください。
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===== Footer ===== -->
+  <footer class="footer">
+    <p>Generated from README.md — 水色ベースデザインシステム</p>
+  </footer>
+
+  <!-- ===== Mobile Menu Script ===== -->
+  <script>
+    const hamburger = document.getElementById('hamburger');
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('overlay');
+
+    hamburger.addEventListener('click', () => {
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('open');
+    });
+
+    overlay.addEventListener('click', () => {
+      sidebar.classList.remove('open');
+      overlay.classList.remove('open');
+    });
+
+    // サイドバーリンククリックでモバイルメニューを閉じる
+    document.querySelectorAll('.sidebar__nav a').forEach(link => {
+      link.addEventListener('click', () => {
+        if (window.innerWidth <= 860) {
+          sidebar.classList.remove('open');
+          overlay.classList.remove('open');
+        }
+      });
+    });
+  </script>
+</body>
+</html>
