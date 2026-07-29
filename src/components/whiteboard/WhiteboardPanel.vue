@@ -1,0 +1,212 @@
+<template>
+  <div class="whiteboard-panel">
+    <div class="whiteboard-panel__pages">
+      <button
+        v-for="page in state.pages"
+        :key="page.id"
+        class="whiteboard-panel__page"
+        :aria-current="page.id === state.selectedPageId"
+        @click="selectPage(page.id)"
+      >
+        {{ page.title }}
+      </button>
+      <button class="whiteboard-panel__add" data-testid="add-whiteboard-page" @click="addPage">ページ追加</button>
+    </div>
+
+    <div class="whiteboard-panel__toolbar" role="toolbar" aria-label="Markdown表示切り替え">
+      <div class="whiteboard-panel__segments">
+        <button type="button" :aria-pressed="viewMode === 'md'" data-testid="md-toggle" @click="viewMode = 'md'">md</button>
+        <button type="button" :aria-pressed="viewMode === 'preview'" data-testid="preview-toggle" @click="viewMode = 'preview'">preview</button>
+      </div>
+      <AppIconButton
+        class="whiteboard-panel__draw"
+        data-testid="add-handwriting"
+        icon="edit"
+        label="手書きを追加"
+        tooltip="手書きを追加"
+        @click="openNewDrawing"
+      />
+    </div>
+
+    <textarea
+      v-if="viewMode === 'md'"
+      v-model="currentMarkdown"
+      class="whiteboard-panel__markdown"
+      data-testid="whiteboard-markdown"
+      aria-label="Markdownノート"
+    />
+    <section v-else class="whiteboard-panel__preview" data-testid="whiteboard-preview" aria-label="Markdownプレビュー">
+      <template v-for="block in previewBlocks" :key="block.id">
+        <component :is="`h${block.level}`" v-if="block.type === 'heading'">{{ block.text }}</component>
+        <p v-else-if="block.type === 'paragraph'">{{ block.text }}</p>
+        <pre v-else-if="block.type === 'code'"><code>{{ block.text }}</code></pre>
+        <ul v-else-if="block.type === 'list'">
+          <li v-for="item in block.items" :key="item">{{ item }}</li>
+        </ul>
+        <figure v-else-if="block.type === 'drawing'" class="whiteboard-panel__drawing">
+          <button type="button" :data-testid="drawingTestId(block)" @click="openDrawingDialog(drawingId(block))">
+            <img :src="drawingDataUrl(block)" alt="手書きメモ" />
+          </button>
+        </figure>
+      </template>
+    </section>
+
+    <WhiteboardDrawingDialog
+      v-if="selectedDrawing"
+      :drawing="selectedDrawing"
+      @close="closeDrawingDialog"
+      @delete="deleteSelectedDrawing"
+      @edit="editSelectedDrawing"
+    />
+    <HandwritingCanvas v-if="isHandwritingOpen" :drawing="editingDrawing" @close="closeHandwriting" @save="saveHandwriting" />
+  </div>
+</template>
+
+<script lang="ts">
+/* eslint-disable max-lines-per-function, max-statements */
+import { computed, defineComponent, ref } from "vue";
+import { renderMarkdownPreview, type MarkdownPreviewBlock } from "@/features/whiteboard/markdownPreview";
+import { createDrawingMarkdown, createWhiteboardDrawing, type WhiteboardStroke } from "@/features/whiteboard/whiteboardDrawings";
+import { useWhiteboardStore, type WhiteboardViewMode } from "@/features/whiteboard/whiteboardStore";
+import AppIconButton from "@/components/ui/AppIconButton.vue";
+import HandwritingCanvas from "@/components/whiteboard/HandwritingCanvas.vue";
+import WhiteboardDrawingDialog from "@/components/whiteboard/WhiteboardDrawingDialog.vue";
+
+const createDrawingId = () => {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return `drawing-${Date.now()}`;
+};
+
+const getDrawingId = (block: MarkdownPreviewBlock) => {
+  if (block.type === "drawing") {
+    return block.drawing.id;
+  }
+
+  return "";
+};
+
+const drawingDataUrl = (block: MarkdownPreviewBlock) => {
+  if (block.type === "drawing") {
+    return block.drawing.dataUrl;
+  }
+
+  return "";
+};
+
+const drawingTestId = (block: MarkdownPreviewBlock) => `open-drawing-${getDrawingId(block)}`;
+
+export default defineComponent({
+  name: "WhiteboardPanel",
+  components: {
+    AppIconButton,
+    HandwritingCanvas,
+    WhiteboardDrawingDialog,
+  },
+  props: {
+    noteId: {
+      required: true,
+      type: String,
+    },
+  },
+  setup(props) {
+    const store = useWhiteboardStore();
+    const document = computed(() => store.documentForNote(props.noteId));
+    const state = computed(() => document.value.pageState);
+    const drawings = computed(() => document.value.drawings);
+    const viewMode = computed({
+      get: () => document.value.viewMode,
+      set: (mode: WhiteboardViewMode) => store.setViewMode(props.noteId, mode),
+    });
+    const editingDrawingId = ref("");
+    const selectedDrawingId = ref("");
+    const isHandwritingOpen = ref(false);
+    const currentPage = computed(() => state.value.pages.find((page) => page.id === state.value.selectedPageId) ?? state.value.pages[0]);
+    const currentMarkdown = computed({
+      get: () => currentPage.value?.markdown ?? "",
+      set: (markdown: string) => store.updateMarkdown(props.noteId, markdown),
+    });
+    const previewBlocks = computed(() => renderMarkdownPreview(currentMarkdown.value, drawings.value));
+    const editingDrawing = computed(() => drawings.value.find((drawing) => drawing.id === editingDrawingId.value) ?? null);
+    const selectedDrawing = computed(() => drawings.value.find((drawing) => drawing.id === selectedDrawingId.value) ?? null);
+    const addPage = () => {
+      store.addPage(props.noteId);
+    };
+    const selectPage = (pageId: string) => {
+      store.selectPage(props.noteId, pageId);
+    };
+    const closeHandwriting = () => {
+      isHandwritingOpen.value = false;
+      editingDrawingId.value = "";
+    };
+    const openNewDrawing = () => {
+      editingDrawingId.value = "";
+      isHandwritingOpen.value = true;
+    };
+    const openDrawingEditor = (targetDrawingId: string) => {
+      editingDrawingId.value = targetDrawingId;
+      isHandwritingOpen.value = true;
+    };
+    const openDrawingDialog = (targetDrawingId: string) => {
+      selectedDrawingId.value = targetDrawingId;
+    };
+    const closeDrawingDialog = () => {
+      selectedDrawingId.value = "";
+    };
+    const editSelectedDrawing = () => {
+      const targetDrawingId = selectedDrawingId.value;
+      closeDrawingDialog();
+      openDrawingEditor(targetDrawingId);
+    };
+    const deleteSelectedDrawing = () => {
+      store.deleteDrawing(props.noteId, selectedDrawingId.value);
+      closeDrawingDialog();
+    };
+    const saveHandwriting = (payload: { dataUrl: string; strokes: WhiteboardStroke[] }) => {
+      const nowIso = new Date().toISOString();
+      const targetDrawingId = editingDrawingId.value || createDrawingId();
+      const existingDrawing = drawings.value.find((drawing) => drawing.id === targetDrawingId);
+      const drawing = createWhiteboardDrawing({
+        dataUrl: payload.dataUrl,
+        id: targetDrawingId,
+        nowIso,
+        strokes: payload.strokes,
+      });
+      store.saveDrawing(props.noteId, {
+        ...drawing,
+        createdAt: existingDrawing?.createdAt ?? drawing.createdAt,
+      });
+      if (!existingDrawing) {
+        currentMarkdown.value = [currentMarkdown.value.trimEnd(), createDrawingMarkdown(targetDrawingId)].filter(Boolean).join("\n\n");
+      }
+      viewMode.value = "preview";
+      closeHandwriting();
+    };
+
+    return {
+      addPage,
+      closeHandwriting,
+      closeDrawingDialog,
+      currentMarkdown,
+      deleteSelectedDrawing,
+      drawingDataUrl,
+      drawingId: getDrawingId,
+      drawingTestId,
+      drawings,
+      editingDrawing,
+      editSelectedDrawing,
+      isHandwritingOpen,
+      openDrawingDialog,
+      openNewDrawing,
+      previewBlocks,
+      saveHandwriting,
+      selectPage,
+      selectedDrawing,
+      state,
+      viewMode,
+    };
+  },
+});
+</script>
