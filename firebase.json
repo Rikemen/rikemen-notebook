@@ -23,6 +23,9 @@
   "hosting": [
     {
       "target": "app",
+      "predeploy": [
+        "npm run build"
+      ],
       "public": "dist",
       "ignore": [
         "firebase.json",
