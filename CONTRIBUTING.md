@@ -8,6 +8,44 @@
 - Firebase本番環境へのデプロイは、最新の`main`からだけ実行する。
 - 未コミット変更がある状態、テスト失敗中、Emulator用ビルドの状態ではデプロイしない。
 
+## mainでのコミット防止を有効にする
+
+初回clone後に、リポジトリ管理下のGitフックを有効にする。
+
+```bash
+git config --local core.hooksPath .githooks
+git config --local --get core.hooksPath
+```
+
+2つ目のコマンドで`.githooks`と表示されれば設定完了。
+以後、`main`または`master`で`git commit`を実行すると、pre-commitフックが
+コミットを拒否する。変更したファイルは削除されず、そのまま作業ツリーに残る。
+
+## mainで作業を始めてしまった場合
+
+pre-commitフックによってコミットを拒否された時点では、変更はまだ`main`へ
+コミットされていない。変更を破棄せず、現在の状態から作業ブランチを作成する。
+
+```bash
+git status --short
+git switch -c feat/<task-name>
+git branch --show-current
+git status --short
+```
+
+`git branch --show-current`に作成したブランチ名が表示され、`git status --short`に
+作業中の変更が残っていることを確認する。その後、通常どおりテストしてコミットする。
+
+```bash
+npm test
+git add <file1> <file2>
+git commit -m "feat(scope): 具体的な変更内容"
+```
+
+この復旧手順では、先に`git restore`、`git reset --hard`、`git stash`を実行しない。
+すでに`main`へコミットまたはpushしている場合は履歴の扱いが異なるため、この手順を
+続けず、コミットとpushの状態を確認してから対応する。
+
 ## 1. 最新のmainから作業ブランチを作る
 
 ```bash
