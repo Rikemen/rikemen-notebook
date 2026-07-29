@@ -57,6 +57,30 @@ npm run serve
 
 [http://localhost:8080](http://localhost:8080) でブラウザからアクセスできます。
 
+## 変更後の使い方
+
+Viteのmode別設定により、Emulator用ビルドはローカルのFirebase Emulatorへ接続し、
+本番用ビルドはFirebase本番環境へ接続します。環境変数を実行のたびに編集する必要はありません。
+
+### Emulatorの場合
+
+```bash
+npm run build:emulator
+npx -y firebase-tools@latest emulators:start
+```
+
+起動後、[http://127.0.0.1:5000](http://127.0.0.1:5000)を開きます。
+
+### 本番の場合
+
+```bash
+npx -y firebase-tools@latest deploy \
+  --project rikemen-notebook \
+  --only hosting:app
+```
+
+本番デプロイではproduction modeでビルドされた`dist`をFirebase Hostingへ公開します。
+
 ---
 
 ## 💻 Functions
