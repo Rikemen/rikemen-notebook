@@ -18,6 +18,7 @@ interface EmulatorGlobalState {
 
 const emulatorState = globalThis as typeof globalThis & EmulatorGlobalState;
 if (
+  import.meta.env.MODE !== "test" &&
   import.meta.env.VITE_USE_FIREBASE_EMULATORS === "true" &&
   !emulatorState.gaussFirebaseEmulatorsConnected
 ) {
