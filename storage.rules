@@ -1,8 +1,24 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function ownsUserPath(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
     match /{allPaths=**} {
-      allow read, write: if request.auth!=null;
+      allow read, write: if false;
+    }
+
+    match /users/{userId}/textbooks/{textbookId}/{fileName} {
+      allow read, delete: if ownsUserPath(userId);
+      allow create, update: if ownsUserPath(userId)
+        && request.resource.size > 0
+        && request.resource.size <= 5368709120
+        && request.resource.contentType == "application/pdf";
     }
   }
 }
