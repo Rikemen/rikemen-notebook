@@ -1,10 +1,9 @@
 export const firebaseConfig = {
-  databaseURL: "https://your-database-name.firebaseio.com",
-  messageKey: "your-message-key",
-  apiKey: "your-api-key",
-  authDomain: "your-project-id.firebaseapp.com",
-  projectId: "your-project-id",
-  storageBucket: "your-project-id.firebasestorage.app",
-  messagingSenderId: "your-messaging-sender-id",
-  appId: "your-app-id",
+  apiKey: "AIzaSyBpwMRdzZ1AWGx4DYmQy6jUW4FrCifpEAE",
+  authDomain: "rikemen-notebook.firebaseapp.com",
+  projectId: "rikemen-notebook",
+  storageBucket: "rikemen-notebook.firebasestorage.app",
+  messagingSenderId: "348559811671",
+  appId: "1:348559811671:web:227fa2075c4b90fac56f12"
 };
+

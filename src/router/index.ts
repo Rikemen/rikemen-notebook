@@ -7,8 +7,12 @@ import Home from "@/views/Home.vue";
 import Account from "@/views/Account.vue";
 import About from "@/views/About.vue";
 import MyPage from "@/views/MyPage.vue";
+import Login from "@/views/Login.vue";
+import NotesListView from "@/views/NotesListView.vue";
+import SignUp from "@/views/SignUp.vue";
+import WorkspaceView from "@/views/WorkspaceView.vue";
 
-const routeChildren: Array<RouteRecordRaw> = [
+export const routeChildren: Array<RouteRecordRaw> = [
   {
     path: "",
     component: Home,
@@ -22,20 +26,49 @@ const routeChildren: Array<RouteRecordRaw> = [
     component: Account,
   },
   {
+    path: "signup",
+    component: SignUp,
+  },
+  {
+    path: "login",
+    component: Login,
+  },
+  {
     path: "mypage",
     component: MyPage,
   },
+  {
+    path: "notes",
+    component: NotesListView,
+    meta: {
+      requiresPersistentUserData: true,
+    },
+  },
+  {
+    path: "notes/:noteId",
+    component: WorkspaceView,
+    meta: {
+      requiresPersistentUserData: true,
+      workspace: true,
+    },
+  },
 ];
-const routes: Array<RouteRecordRaw> = [
+export const routes: Array<RouteRecordRaw> = [
+  {
+    path: "/:lang(en|ja)/:rest(.*)",
+    redirect: (to) => {
+      const { rest } = to.params;
+      if (Array.isArray(rest)) {
+        return `/${rest.join("/")}`;
+      }
+
+      return `/${String(rest ?? "")}`;
+    },
+  },
   {
     path: "/",
     component: Layout,
     children: [
-      {
-        path: "/:lang",
-        component: Blank,
-        children: routeChildren,
-      },
       {
         path: "",
         component: Blank,

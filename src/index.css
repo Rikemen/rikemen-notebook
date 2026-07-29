@@ -1,3 +1,7 @@
 /* ./src/index.css */
 @import 'tailwindcss';
-
+@import './styles/base/tokens.css';
+@import './styles/components/primitives.css';
+@import './styles/components/whiteboard-panel.css';
+@import './styles/views/home-notes-summary.css';
+@import './styles/views/notes-list.css';

@@ -2,6 +2,8 @@
 node_modules
 /dist
 
+# firebase auto create log file
+firestore-debug.log
 
 # local env files
 .env.local

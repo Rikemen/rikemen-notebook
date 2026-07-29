@@ -2,14 +2,146 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /message/{messageId} {
-      allow read, create;
-      allow delete, update: if false;
+    function isSignedIn() {
+      return request.auth != null;
     }
-    match /test/{testId} {
-      allow read;
-      allow create, delete, update: if false;
+
+    function ownsUserPath(userId) {
+      return isSignedIn() && request.auth.uid == userId;
     }
+
+    function hasAllowedNoteFields() {
+      return request.resource.data.keys().hasOnly([
+        "createdAt",
+        "favorite",
+        "recent",
+        "subject",
+        "tags",
+        "title",
+        "updatedAt"
+      ]);
+    }
+
+    function hasValidNoteShape() {
+      return request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 120
+        && request.resource.data.subject is string
+        && request.resource.data.subject.size() <= 80
+        && request.resource.data.tags is list
+        && request.resource.data.tags.size() <= 20
+        && request.resource.data.favorite is bool
+        && request.resource.data.recent is bool
+        && request.resource.data.createdAt is string
+        && request.resource.data.updatedAt is string;
+    }
+
+    function hasValidChatThread(userId, noteId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          "createdAt",
+          "inheritedSummary",
+          "noteId",
+          "ownerUid",
+          "sourceThreadId",
+          "status",
+          "title",
+          "turnCount",
+          "updatedAt"
+        ])
+        && data.keys().hasAll([
+          "createdAt",
+          "noteId",
+          "ownerUid",
+          "status",
+          "title",
+          "turnCount",
+          "updatedAt"
+        ])
+        && data.ownerUid == userId
+        && data.noteId == noteId
+        && data.status in ["active", "full", "summarizing", "archived"]
+        && data.title is string
+        && data.title.size() > 0
+        && data.title.size() <= 80
+        && data.turnCount is int
+        && data.turnCount >= 0
+        && data.turnCount <= 30
+        && data.createdAt is string
+        && data.createdAt.size() <= 40
+        && data.updatedAt is string
+        && data.updatedAt.size() <= 40
+        && (!("inheritedSummary" in data)
+          || (data.inheritedSummary is string && data.inheritedSummary.size() <= 4000))
+        && (!("sourceThreadId" in data)
+          || (data.sourceThreadId is string && data.sourceThreadId.size() <= 128));
+    }
+
+    function hasValidChatMessage(userId, noteId, threadId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          "createdAt",
+          "noteId",
+          "ownerUid",
+          "role",
+          "text",
+          "threadId"
+        ])
+        && data.keys().hasAll([
+          "createdAt",
+          "noteId",
+          "ownerUid",
+          "role",
+          "text",
+          "threadId"
+        ])
+        && data.ownerUid == userId
+        && data.noteId == noteId
+        && data.threadId == threadId
+        && data.role in ["user", "assistant"]
+        && data.text is string
+        && data.text.size() > 0
+        && data.text.size() <= 4000
+        && data.createdAt is string
+        && data.createdAt.size() <= 40;
+    }
+
+    match /users/{userId} {
+      allow read, write: if ownsUserPath(userId);
+
+      match /aiUsage/{date} {
+        allow read, write: if false;
+      }
+
+      match /notes/{noteId} {
+        allow read, delete: if ownsUserPath(userId);
+        allow create, update: if ownsUserPath(userId) && hasAllowedNoteFields() && hasValidNoteShape();
+
+        match /chatThreads/{threadId} {
+          allow read, delete: if ownsUserPath(userId);
+          allow create, update: if ownsUserPath(userId) && hasValidChatThread(userId, noteId);
+
+          match /messages/{messageId} {
+            allow read, delete: if ownsUserPath(userId);
+            allow create, update: if ownsUserPath(userId)
+              && hasValidChatMessage(userId, noteId, threadId);
+          }
+        }
+
+        match /whiteboardPages/{pageId} {
+          allow read, write: if ownsUserPath(userId);
+        }
+
+        match /workspace/{layoutId} {
+          allow read, write: if ownsUserPath(userId);
+        }
+      }
+
+      match /textbooks/{textbookId} {
+        allow read, write: if ownsUserPath(userId);
+      }
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

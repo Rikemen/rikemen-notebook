@@ -16,8 +16,7 @@
 }
 
 #nav {
-  /* padding: 30px; */
-  @apply p-8;
+  padding: 0;
 }
 
 #nav a {
