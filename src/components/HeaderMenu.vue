@@ -1,26 +1,29 @@
 <template>
-  <div id="nav">
+  <nav id="nav" class="flex flex-wrap items-center justify-center gap-3 text-sm">
+    <router-link :to="localizedUrl('/')">HOME</router-link>
     <template v-if="isSignedIn">
-      <router-link :to="localizedUrl('/')"> Home </router-link> |
-      <router-link :to="localizedUrl('/about')"> About </router-link>
+      <router-link :to="localizedUrl('/notes')">マイノート</router-link>
+      <router-link :to="localizedUrl('/about')">使い方</router-link>
     </template>
     <template v-else>
-      <router-link :to="localizedUrl('/')"> Home </router-link> | <router-link :to="localizedUrl('/about')"> About </router-link> |
-      <router-link :to="localizedUrl('/account')"> Signin </router-link>
+      <router-link :to="localizedUrl('/signup')">新規登録</router-link>
+      <router-link :to="localizedUrl('/login')">ログイン</router-link>
     </template>
-  </div>
+  </nav>
 </template>
 
 <script lang="ts">
 import { defineComponent } from "vue";
-import { useIsSignedIn } from "@/utils/utils";
+import { useIsSignedIn, useLang } from "@/utils/utils";
 
 export default defineComponent({
   setup() {
     const isSignedIn = useIsSignedIn();
+    const { localizedUrl } = useLang();
 
     return {
       isSignedIn,
+      localizedUrl,
     };
   },
 });

@@ -1,9 +1,10 @@
 <template>
   <div class="flex flex-col space-y-1 bg-white p-4">
-    <MenuItem v-if="!store.user" link="/account" icon="camera_alt" title="menu.signin" @click="handleClose" />
-    <MenuItem link="/" icon="man" title="menu.top" @click="handleClose" />
+    <MenuItem link="/" icon="home" title="HOME" @click="handleClose" />
+    <MenuItem v-if="!store.user" link="/signup" icon="person_add" title="新規登録" @click="handleClose" />
+    <MenuItem v-if="!store.user" link="/login" icon="login" title="ログイン" @click="handleClose" />
 
-    <MenuItem v-if="store.user" link="/mypage" icon="camera_alt" title="menu.mypage" @click="handleClose" />
+    <MenuItem v-if="store.user" link="/notes" icon="book" title="マイノート" @click="handleClose" />
 
     <MenuItem v-if="store.user" icon="add_circle_outline" title="menu.signout" @click="logout" />
   </div>
