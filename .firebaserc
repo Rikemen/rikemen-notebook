@@ -1,13 +1,12 @@
 {
   "projects": {
-    "default": "your-project-id",
-    "demo": "your-project-id"
+    "default": "rikemen-notebook"
   },
   "targets": {
-    "your-project-id": {
+    "rikemen-notebook": {
       "hosting": {
         "app": [
-          "your-project-id"
+          "rikemen-notebook"
         ]
       }
     }
