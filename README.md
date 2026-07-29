@@ -1,35 +1,4 @@
-# Your Project Name
-
-このプロジェクトは、[Your Project Name]のウェブアプリケーションです。Vue 3およびFirebaseをベースに構築されています。
-
-スターターキット自体の更新手順は「CONTRIBUTING.md」を参照してください。
-
-## プロジェクト概要
-
-- [アプリの目的を記載]を行うためのアプリとして機能します。
-- Vue 3, Vite, Tailwind CSS, Piniaを利用したモダンなフロントエンド環境を採用しています。
-- バックエンド・インフラにはFirebase（Firestore, Functions, Hosting）を利用しています。
-
-> **ベースキット:** このプロジェクトは、Vue3とFirebaseを使用するウェブプロジェクト向けスタートアップキット（`firebase-vue3-startup-kit`）をベースに構築されています。vite、vue-router、pinia、tailwindcss、prettier、vue-tscが含まれています。
-
-## 📋 要件
-
-- Node.js バージョン 22（LTS推奨）。
-
-> **⚠️ Firebase 料金プランに関する注意:**
->
-> このキットには Cloud Firestore と Cloud Functions の設定が含まれています。Spark（無料）プランでは、Firestore を有効化した状態で Cloud Functions をデプロイすることができません。Functions を使用する場合は **Blaze（従量課金）プラン** へのアップグレードが必要です。
->
-> Firestore を使用しない場合は、`firebase.json` から以下の `firestore` セクションを削除し、関連ファイル（`firestore.rules`, `firestore.indexes.json`）も不要であれば削除してください。
->
-> ```json
-> // firebase.json から以下を削除
-> "firestore": {
->   "rules": "firestore.rules",
->   "indexes": "firestore.indexes.json"
-> },
-> ```
-
+# Rikmen Notebook
 ## 📖 初期セットアップ手順
 
 > **💡 stg / prod 環境分離について:**
