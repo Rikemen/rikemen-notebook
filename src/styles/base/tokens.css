@@ -1,0 +1,46 @@
+:root {
+  color-scheme: light;
+
+  --color-bg: #eef1f5;
+  --color-surface: #f4f6f9;
+  --color-surface-strong: #ffffff;
+  --color-surface-inset: #e9edf2;
+  --color-panel: var(--color-surface-strong);
+  --color-border: #d6dce5;
+  --color-text: var(--color-text-primary);
+  --color-text-primary: #171a20;
+  --color-text-secondary: #5f6875;
+  --color-text-muted: #8c95a3;
+  --color-icon: #343a44;
+  --color-blue: #1267e8;
+  --color-blue-hover: #0d56c5;
+  --color-blue-active: #09459f;
+  --color-blue-soft: #e7f0ff;
+  --color-blue-focus: #6ea4ff;
+  --color-red: #d9434e;
+  --color-red-hover: #bb313b;
+  --color-red-active: #96262e;
+  --color-red-soft: #fceaec;
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-pill: 999px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --shadow-raised: 8px 8px 18px rgba(24, 32, 48, 0.11), -8px -8px 18px rgba(255, 255, 255, 0.88);
+  --shadow-raised-sm: 4px 4px 10px rgba(24, 32, 48, 0.1), -4px -4px 10px rgba(255, 255, 255, 0.82);
+  --shadow-inset: inset 3px 3px 8px rgba(24, 32, 48, 0.11), inset -3px -3px 8px rgba(255, 255, 255, 0.86);
+  --shadow-focus: 0 0 0 3px rgba(18, 103, 232, 0.24);
+  --shadow-danger: 0 0 0 3px rgba(217, 67, 78, 0.2);
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: Inter, "Noto Sans JP", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+}
