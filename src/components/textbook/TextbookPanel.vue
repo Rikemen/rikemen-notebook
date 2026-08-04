@@ -1,18 +1,34 @@
 <template>
   <div class="textbook-panel">
-    <MaterialModeSwitcher :model-value="mode" @update:model-value="setMode" />
+    <MaterialModeSwitcher :disabled-modes="disabledModes" :model-value="mode" @update:model-value="setMode" />
 
     <section v-if="mode === 'materials'" class="textbook-panel__body textbook-panel__body--materials">
       <p class="textbook-panel__description">{{ description }}</p>
       <div class="textbook-panel__actions">
         <label class="textbook-panel__upload">
           PDFをアップロード
-          <input class="sr-only" data-testid="textbook-file" type="file" accept="application/pdf" @change="handleFileChange" />
+          <input
+            ref="fileInput"
+            class="sr-only"
+            data-testid="textbook-file"
+            type="file"
+            accept="application/pdf"
+            @change="handleFileChange"
+          />
         </label>
-        <button class="textbook-panel__select" type="button">ファイルを選択</button>
+        <button
+          class="textbook-panel__select"
+          data-testid="textbook-file-trigger"
+          type="button"
+          @click="openFilePicker"
+        >
+          ファイルを選択
+        </button>
       </div>
       <p class="textbook-panel__limit">上限: {{ limitLabel }}</p>
       <p v-if="errorMessage" class="textbook-panel__error">{{ errorMessage }}</p>
+      <p v-if="loadError" class="textbook-panel__error">{{ loadError }}</p>
+      <p v-if="isLoading" class="textbook-panel__limit" aria-live="polite">保存済み教材を読み込んでいます。</p>
       <div class="textbook-panel__material-list">
         <TextbookList :selected-id="selectedTextbookId" :textbooks="materials" @select="selectTextbook" />
       </div>
@@ -30,20 +46,39 @@
     </section>
 
     <section v-else class="textbook-panel__body textbook-panel__body--preview">
-      <TextbookPreview :page="selectedPage" :textbook-title="selectedTextbookTitle" />
-      <PageThumbnailStrip :pages="pages" :selected-page="selectedPage" @select-page="selectPage" />
+      <TextbookPreview
+        :page="selectedPage"
+        :pdf-document="selectedPdfDocument"
+        :source-url="selectedMaterial?.sourceUrl"
+        :textbook-title="selectedTextbookTitle"
+      />
+      <PageThumbnailStrip
+        :pages="pages"
+        :pdf-document="selectedPdfDocument"
+        :selected-page="selectedPage"
+        @select-page="selectPage"
+      />
     </section>
   </div>
 </template>
 
 <script lang="ts">
-/* eslint-disable max-lines-per-function, max-statements */
-import { computed, defineComponent, ref, type PropType } from "vue";
+/* eslint-disable max-lines, max-lines-per-function, max-statements */
+import { computed, defineComponent, ref, watch, type PropType } from "vue";
 import type { AuthUser } from "@/features/auth/types";
 import { canPersistHistory, getUploadLimitBytes } from "@/features/auth/accessPolicy";
-import { createMaterialFromFile, sampleMaterials } from "@/features/textbook/materials";
+import {
+  createMaterialFromFile,
+  createMaterialFromSavedTextbook,
+  materialUploadStatus,
+  validatePdfFile,
+} from "@/features/textbook/materials";
 import type { MaterialTocItem } from "@/features/textbook/materialTableOfContents";
 import { type MaterialPanelMode, useTextbookPanelStore } from "@/features/textbook/textbookPanelStore";
+import type { TextbookRepository } from "@/features/textbook/textbookRepository";
+import { pdfJsDocumentLoader, type PdfDocumentLoader } from "@/features/textbook/pdfDocument";
+import { usePdfDocument } from "@/features/textbook/usePdfDocument";
+import { createDefaultTextbookRepository } from "@/features/textbook/textbookRepositoryProvider";
 import MaterialModeSwitcher from "@/components/textbook/MaterialModeSwitcher.vue";
 import MaterialTableOfContents from "@/components/textbook/MaterialTableOfContents.vue";
 import PageThumbnailStrip from "@/components/textbook/PageThumbnailStrip.vue";
@@ -59,7 +94,7 @@ const formatBytes = (bytes: number) => {
 };
 
 const createId = () => globalThis.crypto?.randomUUID?.() ?? `material-${Date.now()}`;
-
+const defaultRepository = createDefaultTextbookRepository();
 export default defineComponent({
   name: "TextbookPanel",
   components: {
@@ -78,12 +113,23 @@ export default defineComponent({
       required: true,
       type: String,
     },
+    pdfLoader: {
+      default: () => pdfJsDocumentLoader,
+      type: Object as PropType<PdfDocumentLoader>,
+    },
+    repository: {
+      default: undefined,
+      type: Object as PropType<TextbookRepository | undefined>,
+    },
   },
   emits: ["select-file"],
   setup(props, { emit }) {
     const store = useTextbookPanelStore();
-    const panelState = computed(() => store.stateForNote(props.noteId, sampleMaterials));
+    const panelState = computed(() => store.stateForNote(props.noteId));
     const errorMessage = ref("");
+    const fileInput = ref<HTMLInputElement | null>(null);
+    const isLoading = ref(false);
+    const loadError = ref("");
     const materials = computed(() => panelState.value.materials);
     const mode = computed(() => panelState.value.mode);
     const selectedPage = computed(() => panelState.value.selectedPage);
@@ -107,42 +153,151 @@ export default defineComponent({
 
       return "未ログインでは10MBまで一時利用できます。保存と履歴にはログインが必要です。";
     });
+    const disabledModes = computed<MaterialPanelMode[]>(() => {
+      if (materials.value.length === 0) {
+        return ["contents", "preview"];
+      }
+      return [];
+    });
+    const repository = computed(() => props.repository ?? defaultRepository);
+    const { loadPdfDocument, pdfDocument, pdfDocumentSource } = usePdfDocument(() => props.pdfLoader);
+    const selectedPdfDocument = computed(() => {
+      if (selectedMaterial.value?.sourceUrl !== pdfDocumentSource.value) {
+        return null;
+      }
+      return pdfDocument.value;
+    });
+    let loadRequestId = 0;
 
-    const handleFileChange = (event: Event) => {
+    watch(
+      () => [props.currentUser?.uid ?? "", props.noteId] as const,
+      async ([uid, noteId]) => {
+        loadRequestId += 1;
+        const requestId = loadRequestId;
+        loadError.value = "";
+        if (!uid) {
+          return;
+        }
+
+        isLoading.value = true;
+        try {
+          const savedTextbooks = await repository.value.list(uid, noteId);
+          if (requestId === loadRequestId) {
+            store.hydrateMaterials(noteId, savedTextbooks.map(createMaterialFromSavedTextbook));
+          }
+        } catch {
+          if (requestId === loadRequestId) {
+            loadError.value = "保存済み教材の読み込みに失敗しました。";
+          }
+        } finally {
+          if (requestId === loadRequestId) {
+            isLoading.value = false;
+          }
+        }
+      },
+      { immediate: true },
+    );
+
+    watch(
+      () => [selectedMaterial.value?.id ?? "", selectedMaterial.value?.sourceUrl ?? ""] as const,
+      async ([materialId, sourceUrl]) => {
+        if (!sourceUrl || sourceUrl === pdfDocumentSource.value) {
+          return;
+        }
+
+        const document = await loadPdfDocument(sourceUrl);
+        if (!document) {
+          errorMessage.value = "PDFを読み込めませんでした。別のPDFを選択してください。";
+          return;
+        }
+        if (selectedMaterial.value?.id === materialId) {
+          store.updateMaterial(props.noteId, materialId, { pageCount: document.pageCount });
+        }
+      },
+      { immediate: true },
+    );
+
+    const handleFileChange = async (event: Event) => {
       const { files } = event.target as HTMLInputElement;
       const [file] = files ?? [];
       if (!file) {
         return;
       }
 
-      if (file.size > uploadLimitBytes.value) {
-        errorMessage.value = `${limitLabel.value}以下のPDFを選択してください。`;
+      const validation = validatePdfFile(file, uploadLimitBytes.value);
+      if (!validation.ok) {
+        if (validation.message === "file-too-large") {
+          errorMessage.value = `${limitLabel.value}以下のPDFを選択してください。`;
+        } else {
+          errorMessage.value = validation.message;
+        }
+        (event.target as HTMLInputElement).value = "";
         return;
       }
 
       errorMessage.value = "";
-      store.addMaterial(props.noteId, createMaterialFromFile(file, createId()), sampleMaterials);
+      const materialId = createId();
+      const sourceUrl = URL.createObjectURL(file);
+      const document = await loadPdfDocument(sourceUrl);
+      if (!document) {
+        URL.revokeObjectURL(sourceUrl);
+        errorMessage.value = "PDFを読み込めませんでした。別のPDFを選択してください。";
+        (event.target as HTMLInputElement).value = "";
+        return;
+      }
+      const { pageCount } = document;
+      store.addMaterial(
+        props.noteId,
+        createMaterialFromFile(file, materialId, {
+          pageCount,
+          sourceUrl,
+          status: materialUploadStatus(props.currentUser),
+        }),
+      );
+      store.setMode(props.noteId, "preview");
       emit("select-file", file);
+
+      if (props.currentUser) {
+        try {
+          const metadata = await repository.value.save(
+            {
+              file,
+              id: materialId,
+              noteId: props.noteId,
+              pageCount,
+            },
+            props.currentUser,
+          );
+          store.updateMaterial(props.noteId, materialId, {
+            status: "saved",
+            storagePath: metadata.storagePath,
+          });
+        } catch {
+          store.updateMaterial(props.noteId, materialId, { status: "error" });
+          errorMessage.value = "PDFの保存に失敗しました。プレビューはこの画面で一時利用できます。";
+        }
+      }
     };
+    const openFilePicker = () => fileInput.value?.click();
     const selectTextbook = (textbookId: string) => {
-      store.selectTextbook(props.noteId, textbookId, sampleMaterials);
+      store.selectTextbook(props.noteId, textbookId);
     };
     const selectPage = (page: number) => {
-      store.selectPage(props.noteId, page, sampleMaterials);
+      store.selectPage(props.noteId, page);
     };
     const setMode = (nextMode: MaterialPanelMode) => {
-      store.setMode(props.noteId, nextMode, sampleMaterials);
+      if (!disabledModes.value.includes(nextMode)) {
+        store.setMode(props.noteId, nextMode);
+      }
     };
     const addTocItem = (item: MaterialTocItem) => {
       store.addTocItem(props.noteId, {
-        initialMaterials: sampleMaterials,
         item,
         materialId: selectedTextbookId.value,
       });
     };
     const openTocItem = (item: MaterialTocItem) => {
       store.openTocItem(props.noteId, {
-        initialMaterials: sampleMaterials,
         item,
         materialId: selectedTextbookId.value,
       });
@@ -151,16 +306,23 @@ export default defineComponent({
     return {
       addTocItem,
       description,
+      disabledModes,
       errorMessage,
+      fileInput,
       handleFileChange,
+      isLoading,
       limitLabel,
+      loadError,
       materials,
       mode,
       openTocItem,
+      openFilePicker,
       pages,
+      pdfDocument,
       selectPage,
       selectTextbook,
       selectedMaterial,
+      selectedPdfDocument,
       selectedPage,
       selectedTableOfContents,
       selectedTextbookId,
@@ -171,103 +333,4 @@ export default defineComponent({
 });
 </script>
 
-<style scoped>
-.textbook-panel {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: var(--space-3);
-  height: 100%;
-  min-height: 0;
-  width: 100%;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.textbook-panel__body {
-  min-height: 0;
-  min-width: 0;
-  overflow: auto;
-}
-
-.textbook-panel__body--materials {
-  display: grid;
-  grid-template-rows: auto auto auto auto minmax(0, 1fr);
-  align-content: start;
-  gap: var(--space-3);
-  overflow: hidden;
-}
-
-.textbook-panel__body--contents {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: var(--space-2);
-  overflow: hidden;
-}
-
-.textbook-panel__body--preview {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: var(--space-3);
-  overflow: hidden;
-}
-
-.textbook-panel__description,
-.textbook-panel__limit,
-.textbook-panel__selected-material {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: 0.82rem;
-}
-
-.textbook-panel__selected-material {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.textbook-panel__material-list {
-  min-height: 0;
-  overflow: auto;
-}
-
-.textbook-panel__actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2);
-}
-
-.textbook-panel__upload,
-.textbook-panel__select {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  min-height: 2.35rem;
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-raised-sm);
-  cursor: pointer;
-  font-size: 0.82rem;
-  font-weight: 800;
-  text-align: center;
-}
-
-.textbook-panel__upload {
-  background: var(--color-blue);
-  color: white;
-}
-
-.textbook-panel__select {
-  border: 1px solid rgba(255, 255, 255, 0.72);
-  background: var(--color-surface);
-  color: var(--color-blue);
-}
-
-.textbook-panel__error {
-  margin: 0;
-  border-radius: var(--radius-md);
-  background: var(--color-red-soft);
-  color: var(--color-red);
-  font-size: 0.82rem;
-  padding: var(--space-2);
-}
-</style>
+<style scoped src="../../styles/components/textbook-panel.css"></style>

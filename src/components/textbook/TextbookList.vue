@@ -1,5 +1,6 @@
 <template>
   <section aria-label="アップロード済みの資料" class="textbook-list">
+    <p v-if="textbooks.length === 0" class="textbook-list__empty">PDFを追加してください。</p>
     <button
       v-for="textbook in textbooks"
       :key="textbook.id"
@@ -12,6 +13,9 @@
       <span>
         <strong>{{ textbook.title }}</strong>
         <small>{{ textbook.sizeLabel }}・{{ textbook.uploadedAt }}</small>
+        <small v-if="materialStatusLabel(textbook.status)" class="textbook-list__status">
+          {{ materialStatusLabel(textbook.status) }}
+        </small>
       </span>
     </button>
   </section>
@@ -19,7 +23,7 @@
 
 <script lang="ts">
 import { defineComponent, type PropType } from "vue";
-import type { MaterialListItem } from "@/features/textbook/materials";
+import { materialStatusLabel, type MaterialListItem } from "@/features/textbook/materials";
 
 export default defineComponent({
   name: "TextbookList",
@@ -34,6 +38,11 @@ export default defineComponent({
     },
   },
   emits: ["select"],
+  setup() {
+    return {
+      materialStatusLabel,
+    };
+  },
 });
 </script>
 
@@ -42,6 +51,16 @@ export default defineComponent({
   display: grid;
   gap: var(--space-2);
   min-width: 0;
+}
+
+.textbook-list__empty {
+  margin: 0;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  padding: var(--space-4) var(--space-3);
+  text-align: center;
 }
 
 .textbook-list__item {
@@ -81,6 +100,11 @@ export default defineComponent({
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.textbook-list__status {
+  color: var(--color-blue);
+  font-weight: 700;
 }
 
 .textbook-list small {

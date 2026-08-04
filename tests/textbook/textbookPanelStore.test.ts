@@ -1,37 +1,44 @@
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { MaterialListItem } from "@/features/textbook/materials";
 import type { MaterialTocItem } from "@/features/textbook/materialTableOfContents";
 import { useTextbookPanelStore } from "@/features/textbook/textbookPanelStore";
 
-const initialMaterials: MaterialListItem[] = [
-  {
-    id: "material-1",
-    pageCount: 6,
-    sizeLabel: "1.2 MB",
-    title: "解析.pdf",
-    uploadedAt: "2026/07/29",
-  },
-];
+const material = {
+  id: "material-1",
+  pageCount: 6,
+  sizeLabel: "1.2 MB",
+  title: "解析.pdf",
+  uploadedAt: "2026/07/29",
+};
 
 describe("textbookPanelStore", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
   });
 
-  it("ノートごとに資料パネルのモードを保持する", () => {
+  it("新規ノートは空の資料一覧から始まる", () => {
     const store = useTextbookPanelStore();
 
-    expect(store.stateForNote("note-a", initialMaterials).mode).toBe("materials");
-    store.setMode("note-a", "contents", initialMaterials);
+    expect(store.stateForNote("note-a")).toMatchObject({
+      materials: [],
+      mode: "materials",
+      selectedPage: 1,
+      selectedTextbookId: "",
+    });
+  });
 
-    expect(store.stateForNote("note-a", initialMaterials).mode).toBe("contents");
-    expect(store.stateForNote("note-b", initialMaterials).mode).toBe("materials");
+  it("ノートごとに資料パネルのモードを保持する", () => {
+    const store = useTextbookPanelStore();
+    store.addMaterial("note-a", material);
+    store.setMode("note-a", "contents");
+
+    expect(store.stateForNote("note-a").mode).toBe("contents");
+    expect(store.stateForNote("note-b").mode).toBe("materials");
   });
 
   it("追加資料を現在のノートだけに保持する", () => {
     const store = useTextbookPanelStore();
-    const added: MaterialListItem = {
+    const added = {
       id: "material-added",
       pageCount: 6,
       sizeLabel: "2.0 MB",
@@ -39,14 +46,15 @@ describe("textbookPanelStore", () => {
       uploadedAt: "2026/07/29",
     };
 
-    store.addMaterial("note-a", added, initialMaterials);
+    store.addMaterial("note-a", added);
 
-    expect(store.stateForNote("note-a", initialMaterials).materials).toContainEqual(added);
-    expect(store.stateForNote("note-b", initialMaterials).materials).not.toContainEqual(added);
+    expect(store.stateForNote("note-a").materials).toContainEqual(added);
+    expect(store.stateForNote("note-b").materials).not.toContainEqual(added);
   });
 
   it("目次選択で対象資料とページを選びプレビューモードへ移動する", () => {
     const store = useTextbookPanelStore();
+    store.addMaterial("note-a", material);
     const item: MaterialTocItem = {
       children: [],
       id: "toc-1",
@@ -55,22 +63,36 @@ describe("textbookPanelStore", () => {
     };
 
     store.addTocItem("note-a", {
-      initialMaterials,
       item,
       materialId: "material-1",
     });
     store.openTocItem("note-a", {
-      initialMaterials,
       item,
       materialId: "material-1",
     });
 
-    const state = store.stateForNote("note-a", initialMaterials);
+    const state = store.stateForNote("note-a");
     expect(state.tocByMaterialId["material-1"]).toContainEqual(item);
     expect(state).toMatchObject({
       mode: "preview",
       selectedPage: 4,
       selectedTextbookId: "material-1",
     });
+  });
+
+  it("保存済み教材を重複なく復元し状態を更新する", () => {
+    const store = useTextbookPanelStore();
+    const saved = {
+      ...material,
+      sourceUrl: "https://storage.example/material-1.pdf",
+      status: "saved" as const,
+    };
+
+    store.hydrateMaterials("note-a", [saved]);
+    store.hydrateMaterials("note-a", [saved]);
+    store.updateMaterial("note-a", "material-1", { status: "error" });
+
+    expect(store.stateForNote("note-a").materials).toEqual([{ ...saved, status: "error" }]);
+    expect(store.stateForNote("note-b").materials).toEqual([]);
   });
 });

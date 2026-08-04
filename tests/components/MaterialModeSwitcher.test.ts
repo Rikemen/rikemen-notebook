@@ -20,4 +20,20 @@ describe("MaterialModeSwitcher", () => {
 
     expect(wrapper.emitted("update:modelValue")?.[0]).toEqual(["contents"]);
   });
+
+  it("教材がないときは目次とプレビューを無効にする", async () => {
+    const wrapper = mount(MaterialModeSwitcher, {
+      props: {
+        disabledModes: ["contents", "preview"],
+        modelValue: "materials",
+      },
+    });
+    const buttons = wrapper.findAll("button");
+
+    expect(buttons[1].attributes("disabled")).toBeDefined();
+    expect(buttons[2].attributes("disabled")).toBeDefined();
+    await buttons[1].trigger("click");
+
+    expect(wrapper.emitted("update:modelValue")).toBeUndefined();
+  });
 });
