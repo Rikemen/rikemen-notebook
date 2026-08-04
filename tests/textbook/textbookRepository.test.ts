@@ -18,14 +18,18 @@ describe("textbookRepository", () => {
         contentType: "application/pdf",
         fileName: "textbook.pdf",
         id: "textbook-1",
+        noteId: "note-1",
+        pageCount: 12,
         sizeBytes: 1024,
       },
       user,
     );
 
-    expect(target.metadataPath).toBe("users/user-1/textbooks/textbook-1");
-    expect(target.storagePath).toBe("users/user-1/textbooks/textbook-1/textbook.pdf");
+    expect(target.metadataPath).toBe("users/user-1/notes/note-1/materials/textbook-1");
+    expect(target.storagePath).toBe("users/user-1/notes/note-1/materials/textbook-1/textbook.pdf");
     expect(target.metadata.ownerUid).toBe("user-1");
+    expect(target.metadata.noteId).toBe("note-1");
+    expect(target.metadata.pageCount).toBe(12);
   });
 
   it("未ログイン保存と5GB超過を拒否する", () => {
@@ -33,6 +37,8 @@ describe("textbookRepository", () => {
       contentType: "application/pdf",
       fileName: "textbook.pdf",
       id: "textbook-1",
+      noteId: "note-1",
+      pageCount: 1,
       sizeBytes: 1024,
     };
 
@@ -50,18 +56,19 @@ describe("textbookRepository", () => {
 
   it("uid ごとに教材メタデータを一覧取得する", async () => {
     const repository = new InMemoryTextbookRepository();
+    const file = new File(["pdf"], "textbook.pdf", { type: "application/pdf" });
     await repository.save(
       {
-        contentType: "application/pdf",
-        fileName: "textbook.pdf",
+        file,
         id: "textbook-1",
-        sizeBytes: 1024,
+        noteId: "note-1",
+        pageCount: 4,
       },
       user,
     );
 
-    await expect(repository.list("user-1")).resolves.toHaveLength(1);
-    await expect(repository.list("other-user")).resolves.toHaveLength(0);
+    await expect(repository.list("user-1", "note-1")).resolves.toHaveLength(1);
+    await expect(repository.list("user-1", "note-2")).resolves.toHaveLength(0);
+    await expect(repository.list("other-user", "note-1")).resolves.toHaveLength(0);
   });
 });
-

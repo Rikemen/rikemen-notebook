@@ -17,4 +17,10 @@ describe("storageRules", () => {
     expect(rules).toContain("request.resource.size <= 5368709120");
     expect(rules).toContain('request.resource.contentType == "application/pdf"');
   });
+
+  it("ノート別教材パスを本人だけに許可する", () => {
+    expect(rules).toContain("match /users/{userId}/notes/{noteId}/materials/{materialId}/{fileName}");
+    expect(rules).toContain("fileName.size() <= 240");
+    expect(rules).toContain("materialId.size() <= 128");
+  });
 });

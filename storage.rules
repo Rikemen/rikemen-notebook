@@ -20,5 +20,19 @@ service firebase.storage {
         && request.resource.size <= 5368709120
         && request.resource.contentType == "application/pdf";
     }
+
+    match /users/{userId}/notes/{noteId}/materials/{materialId}/{fileName} {
+      allow read, delete: if ownsUserPath(userId);
+      allow create, update: if ownsUserPath(userId)
+        && noteId.size() > 0
+        && noteId.size() <= 128
+        && materialId.size() > 0
+        && materialId.size() <= 128
+        && fileName.size() > 0
+        && fileName.size() <= 240
+        && request.resource.size > 0
+        && request.resource.size <= 5368709120
+        && request.resource.contentType == "application/pdf";
+    }
   }
 }

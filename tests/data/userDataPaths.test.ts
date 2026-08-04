@@ -5,9 +5,10 @@ import {
   chatThreadsCollectionPath,
   noteChatMessagePath,
   noteDocumentPath,
+  noteMaterialDocumentPath,
+  noteMaterialsCollectionPath,
+  noteMaterialStoragePath,
   notesCollectionPath,
-  textbookDocumentPath,
-  textbookStoragePath,
   userRootPath,
   whiteboardPagePath,
 } from "@/features/user-data/userDataPaths";
@@ -37,16 +38,22 @@ describe("userDataPaths", () => {
     expect(whiteboardPagePath({ childId: "page-1", noteId: "note-1", uid: "user-1" })).toBe(
       "users/user-1/notes/note-1/whiteboardPages/page-1",
     );
-    expect(textbookDocumentPath({ noteId: "textbook-1", uid: "user-1" })).toBe("users/user-1/textbooks/textbook-1");
+    expect(noteMaterialsCollectionPath({ noteId: "note-1", uid: "user-1" })).toBe(
+      "users/user-1/notes/note-1/materials",
+    );
+    expect(noteMaterialDocumentPath({ childId: "material-1", noteId: "note-1", uid: "user-1" })).toBe(
+      "users/user-1/notes/note-1/materials/material-1",
+    );
   });
 
   it("Storage パスの各セグメントをエンコードする", () => {
     expect(
-      textbookStoragePath({
+      noteMaterialStoragePath({
         fileName: "linear algebra.pdf",
-        textbookId: "textbook 1",
+        materialId: "material 1",
+        noteId: "note 1",
         uid: "user@example.com",
       }),
-    ).toBe("users/user%40example.com/textbooks/textbook%201/linear%20algebra.pdf");
+    ).toBe("users/user%40example.com/notes/note%201/materials/material%201/linear%20algebra.pdf");
   });
 });
