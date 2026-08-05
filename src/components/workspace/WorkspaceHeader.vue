@@ -28,11 +28,29 @@
     </nav>
 
     <div class="workspace-header__actions">
-      <AppIconButton icon="undo" label="元に戻す" />
-      <AppIconButton icon="redo" label="やり直す" />
-      <span class="ui-raised hidden rounded-[var(--radius-pill)] px-4 py-2 text-xs text-[var(--color-text-secondary)] sm:inline-flex">自動保存済み</span>
-      <AppButton variant="primary">共有</AppButton>
-      <span class="ui-raised flex h-10 w-10 items-center justify-center rounded-full font-bold text-[var(--color-blue)]">{{ userInitial }}</span>
+      <div aria-label="ワークスペース表示モード" class="workspace-header__layout-mode" role="toolbar">
+        <AppIconButton
+          :aria-pressed="layoutMode === 'docked'"
+          icon="view_quilt"
+          label="ドッキング表示"
+          tooltip="ドッキング表示"
+          @click="$emit('select-layout-mode', 'docked')"
+        />
+        <AppIconButton
+          :aria-pressed="layoutMode === 'free'"
+          icon="open_with"
+          label="自由配置表示"
+          tooltip="自由配置表示"
+          @click="$emit('select-layout-mode', 'free')"
+        />
+      </div>
+      <div class="workspace-header__utility-actions">
+        <AppIconButton icon="undo" label="元に戻す" />
+        <AppIconButton icon="redo" label="やり直す" />
+        <span class="ui-raised hidden rounded-[var(--radius-pill)] px-4 py-2 text-xs text-[var(--color-text-secondary)] sm:inline-flex">自動保存済み</span>
+        <AppButton variant="primary">共有</AppButton>
+        <span class="ui-raised flex h-10 w-10 items-center justify-center rounded-full font-bold text-[var(--color-blue)]">{{ userInitial }}</span>
+      </div>
     </div>
   </header>
 </template>
@@ -42,6 +60,7 @@ import { computed, defineComponent, type PropType } from "vue";
 import type { AuthUser } from "@/features/auth/types";
 import { APP_NAME } from "@/config/appBrand";
 import { workspacePanels, type WorkspacePanelId, type WorkspacePanelVisibility } from "@/features/workspace/panels";
+import type { WorkspaceLayoutMode } from "@/features/workspace/panelLayout";
 import AppButton from "@/components/ui/AppButton.vue";
 import AppIconButton from "@/components/ui/AppIconButton.vue";
 
@@ -67,6 +86,10 @@ export default defineComponent({
       default: null,
       type: Object as PropType<AuthUser | null>,
     },
+    layoutMode: {
+      default: "docked",
+      type: String as PropType<WorkspaceLayoutMode>,
+    },
     noteTitle: {
       default: "",
       type: String,
@@ -77,6 +100,7 @@ export default defineComponent({
     },
   },
   emits: {
+    "select-layout-mode": (mode: WorkspaceLayoutMode) => mode === "docked" || mode === "free",
     "toggle-panel": (panelId: WorkspacePanelId) => workspacePanels.some((panel) => panel.id === panelId),
   },
   setup(props) {
@@ -137,6 +161,23 @@ export default defineComponent({
 .workspace-header__actions {
   gap: var(--space-2);
   justify-content: flex-end;
+}
+
+.workspace-header__layout-mode,
+.workspace-header__utility-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.workspace-header__layout-mode {
+  padding-right: var(--space-2);
+  border-right: 1px solid var(--color-border);
+}
+
+.workspace-header__layout-mode :deep(.app-icon-button[aria-pressed="true"]) {
+  box-shadow: var(--shadow-inset);
+  color: var(--color-blue);
 }
 
 .workspace-panel-switcher {
@@ -207,7 +248,16 @@ export default defineComponent({
   }
 
   .workspace-header__actions {
+    justify-content: flex-start;
+  }
+
+  .workspace-header__utility-actions {
     display: none;
+  }
+
+  .workspace-header__layout-mode {
+    padding-right: 0;
+    border-right: 0;
   }
 
   .workspace-panel-switcher {

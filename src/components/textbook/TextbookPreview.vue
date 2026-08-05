@@ -1,7 +1,42 @@
 <template>
   <section ref="previewContainer" aria-label="選択中ページプレビュー" class="textbook-preview">
-    <h3>{{ textbookTitle }}・{{ page }}ページ</h3>
-    <div v-if="sourceUrl" ref="previewDocument" class="textbook-preview__document">
+    <header class="textbook-preview__header">
+      <h3>{{ textbookTitle }}・{{ page }}ページ</h3>
+      <div v-if="canZoom" aria-label="PDFズーム" class="textbook-preview__zoom" role="toolbar">
+        <AppIconButton
+          :disabled="zoom <= MIN_PDF_ZOOM"
+          icon="zoom_out"
+          label="PDFを縮小"
+          tooltip="PDFを縮小"
+          @click="zoomOut"
+        />
+        <span data-testid="pdf-zoom-status" aria-live="polite">{{ zoomPercent }}%</span>
+        <AppIconButton
+          :disabled="zoom >= MAX_PDF_ZOOM"
+          icon="zoom_in"
+          label="PDFを拡大"
+          tooltip="PDFを拡大"
+          @click="zoomIn"
+        />
+        <AppIconButton
+          :disabled="zoom === MIN_PDF_ZOOM"
+          icon="restart_alt"
+          label="PDFを100%に戻す"
+          tooltip="PDFを100%に戻す"
+          @click="resetZoom"
+        />
+      </div>
+    </header>
+    <div
+      v-if="sourceUrl"
+      ref="previewDocument"
+      class="textbook-preview__document"
+      :class="{ 'textbook-preview__document--zoom-enabled': canZoom }"
+      @pointercancel="handlePointerEnd"
+      @pointerdown="handlePointerDown"
+      @pointermove="handlePointerMove"
+      @pointerup="handlePointerEnd"
+    >
       <canvas
         v-if="pdfDocument && !renderError"
         ref="canvas"
@@ -40,11 +75,30 @@ import {
   type PropType,
 } from "vue";
 import type { LoadedPdfDocument, PdfPageRenderHandle } from "@/features/textbook/pdfDocument";
+import {
+  calculatePinchZoom,
+  clampPdfZoom,
+  decreasePdfZoom,
+  increasePdfZoom,
+  MAX_PDF_ZOOM,
+  MIN_PDF_ZOOM,
+} from "@/features/textbook/pdfZoom";
+import AppIconButton from "@/components/ui/AppIconButton.vue";
 
 const FALLBACK_PREVIEW_WIDTH = 720;
+interface PointerPosition { clientX: number; clientY: number }
+
+const distanceBetweenPointers = (pointers: PointerPosition[]) => {
+  const [first, second] = pointers;
+  if (!first || !second) {
+    return 0;
+  }
+  return Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
+};
 
 export default defineComponent({
   name: "TextbookPreview",
+  components: { AppIconButton },
   props: {
     pdfDocument: {
       default: null,
@@ -62,6 +116,10 @@ export default defineComponent({
       default: "",
       type: String,
     },
+    zoomEnabled: {
+      default: false,
+      type: Boolean,
+    },
   },
   setup(props) {
     const canvas = ref<HTMLCanvasElement | null>(null);
@@ -69,11 +127,17 @@ export default defineComponent({
     const previewContainer = ref<HTMLElement | null>(null);
     const previewDocument = ref<HTMLElement | null>(null);
     const renderError = ref(false);
+    const zoom = ref(MIN_PDF_ZOOM);
+    const canZoom = computed(() => props.zoomEnabled && Boolean(props.pdfDocument));
     const previewUrl = computed(() => `${props.sourceUrl.split("#")[0]}#page=${props.page}`);
+    const zoomPercent = computed(() => Math.round(zoom.value * 100));
     let observedWidth = 0;
     let activeRender: PdfPageRenderHandle | null = null;
     let renderRequestId = 0;
     let resizeObserver: ResizeObserver | null = null;
+    const activePointers = new Map<number, PointerPosition>();
+    let pinchStartDistance = 0;
+    let pinchStartZoom = MIN_PDF_ZOOM;
 
     const targetWidth = () => {
       if (observedWidth > 0) {
@@ -94,7 +158,7 @@ export default defineComponent({
 
       isRendering.value = true;
       try {
-        const render = await props.pdfDocument.renderPage(canvas.value, props.page, targetWidth());
+        const render = await props.pdfDocument.renderPage(canvas.value, props.page, targetWidth() * zoom.value);
         if (requestId !== renderRequestId) {
           render.cancel();
           await render.promise.catch(() => undefined);
@@ -116,11 +180,76 @@ export default defineComponent({
     };
 
     watch(
-      () => [props.pdfDocument, props.page] as const,
+      () => [props.pdfDocument, props.page, zoom.value] as const,
       () => {
         nextTick(renderPage).catch(() => undefined);
       },
       { immediate: true },
+    );
+
+    const clearPointerState = () => {
+      activePointers.clear();
+      pinchStartDistance = 0;
+      pinchStartZoom = zoom.value;
+    };
+    const setZoom = (nextZoom: number) => {
+      zoom.value = clampPdfZoom(nextZoom);
+    };
+    const resetZoom = () => setZoom(MIN_PDF_ZOOM);
+    const zoomIn = () => setZoom(increasePdfZoom(zoom.value));
+    const zoomOut = () => setZoom(decreasePdfZoom(zoom.value));
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!canZoom.value) {
+        return;
+      }
+      activePointers.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
+      (event.currentTarget as HTMLElement | null)?.setPointerCapture?.(event.pointerId);
+      if (activePointers.size === 2) {
+        pinchStartDistance = distanceBetweenPointers([...activePointers.values()]);
+        pinchStartZoom = zoom.value;
+      }
+    };
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!canZoom.value || !activePointers.has(event.pointerId)) {
+        return;
+      }
+      activePointers.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
+      if (activePointers.size !== 2 || pinchStartDistance <= 0) {
+        return;
+      }
+      event.preventDefault();
+      setZoom(
+        calculatePinchZoom(
+          pinchStartZoom,
+          pinchStartDistance,
+          distanceBetweenPointers([...activePointers.values()]),
+        ),
+      );
+    };
+    const handlePointerEnd = (event: PointerEvent) => {
+      activePointers.delete(event.pointerId);
+      (event.currentTarget as HTMLElement | null)?.releasePointerCapture?.(event.pointerId);
+      if (activePointers.size < 2) {
+        pinchStartDistance = 0;
+        pinchStartZoom = zoom.value;
+      }
+    };
+
+    watch(
+      () => props.pdfDocument,
+      () => {
+        clearPointerState();
+        resetZoom();
+      },
+    );
+    watch(
+      () => props.zoomEnabled,
+      (enabled) => {
+        if (!enabled) {
+          clearPointerState();
+          resetZoom();
+        }
+      },
     );
 
     onMounted(() => {
@@ -142,83 +271,30 @@ export default defineComponent({
       renderRequestId += 1;
       activeRender?.cancel();
       resizeObserver?.disconnect();
+      clearPointerState();
     });
 
     return {
+      canZoom,
       canvas,
+      handlePointerDown,
+      handlePointerEnd,
+      handlePointerMove,
       isRendering,
+      MAX_PDF_ZOOM,
+      MIN_PDF_ZOOM,
       previewContainer,
       previewDocument,
       previewUrl,
       renderError,
+      resetZoom,
+      zoom,
+      zoomIn,
+      zoomOut,
+      zoomPercent,
     };
   },
 });
 </script>
 
-<style scoped>
-.textbook-preview {
-  height: 100%;
-  min-height: 0;
-  width: 100%;
-  overflow: auto;
-}
-
-.textbook-preview h3 {
-  overflow: hidden;
-  margin: 0 0 var(--space-2);
-  color: var(--color-text-muted);
-  font-size: 0.8rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.textbook-preview__document {
-  position: relative;
-  display: grid;
-  width: 100%;
-  min-height: 240px;
-  place-items: start center;
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-inset);
-  overflow: auto;
-}
-
-.textbook-preview__canvas {
-  display: block;
-  max-width: 100%;
-  background: white;
-}
-
-.textbook-preview__loading {
-  position: absolute;
-  inset: var(--space-3) auto auto 50%;
-  margin: 0;
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.9);
-  color: var(--color-text-muted);
-  font-size: 0.78rem;
-  padding: var(--space-1) var(--space-2);
-  transform: translateX(-50%);
-}
-
-.textbook-preview__fallback {
-  display: block;
-  width: 100%;
-  height: 100%;
-  min-height: 240px;
-  border: 0;
-  background: white;
-}
-
-.textbook-preview__empty {
-  margin: 0;
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text-muted);
-  font-size: 0.82rem;
-  padding: var(--space-4) var(--space-3);
-  text-align: center;
-}
-</style>
+<style scoped src="../../styles/components/textbook-preview.css"></style>

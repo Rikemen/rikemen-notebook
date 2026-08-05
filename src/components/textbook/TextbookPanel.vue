@@ -1,5 +1,5 @@
 <template>
-  <div class="textbook-panel">
+  <div class="textbook-panel" :class="{ 'textbook-panel--maximized': isMaximized }">
     <MaterialModeSwitcher :disabled-modes="disabledModes" :model-value="mode" @update:model-value="setMode" />
 
     <section v-if="mode === 'materials'" class="textbook-panel__body textbook-panel__body--materials">
@@ -45,18 +45,29 @@
       />
     </section>
 
-    <section v-else class="textbook-panel__body textbook-panel__body--preview">
+    <section
+      v-else
+      class="textbook-panel__body textbook-panel__body--preview"
+      :class="{
+        'textbook-panel__body--preview-maximized': isMaximized,
+        'textbook-panel__body--thumbnails-collapsed': thumbnailsCollapsed,
+      }"
+    >
       <TextbookPreview
         :page="selectedPage"
         :pdf-document="selectedPdfDocument"
         :source-url="selectedMaterial?.sourceUrl"
         :textbook-title="selectedTextbookTitle"
+        :zoom-enabled="isMaximized"
       />
       <PageThumbnailStrip
+        :collapsed="thumbnailsCollapsed"
+        :orientation="thumbnailOrientation"
         :pages="pages"
         :pdf-document="selectedPdfDocument"
         :selected-page="selectedPage"
         @select-page="selectPage"
+        @update:collapsed="setThumbnailsCollapsed"
       />
     </section>
   </div>
@@ -109,6 +120,10 @@ export default defineComponent({
       default: null,
       type: Object as PropType<AuthUser | null>,
     },
+    isMaximized: {
+      default: false,
+      type: Boolean,
+    },
     noteId: {
       required: true,
       type: String,
@@ -134,6 +149,13 @@ export default defineComponent({
     const mode = computed(() => panelState.value.mode);
     const selectedPage = computed(() => panelState.value.selectedPage);
     const selectedTextbookId = computed(() => panelState.value.selectedTextbookId);
+    const thumbnailsCollapsed = computed(() => panelState.value.thumbnailsCollapsed);
+    const thumbnailOrientation = computed(() => {
+      if (props.isMaximized) {
+        return "vertical";
+      }
+      return "horizontal";
+    });
     const selectedMaterial = computed(() =>
       materials.value.find((material) => material.id === selectedTextbookId.value),
     );
@@ -290,6 +312,9 @@ export default defineComponent({
         store.setMode(props.noteId, nextMode);
       }
     };
+    const setThumbnailsCollapsed = (collapsed: boolean) => {
+      store.setThumbnailsCollapsed(props.noteId, collapsed);
+    };
     const addTocItem = (item: MaterialTocItem) => {
       store.addTocItem(props.noteId, {
         item,
@@ -328,6 +353,9 @@ export default defineComponent({
       selectedTextbookId,
       selectedTextbookTitle,
       setMode,
+      setThumbnailsCollapsed,
+      thumbnailOrientation,
+      thumbnailsCollapsed,
     };
   },
 });
