@@ -24,7 +24,17 @@ describe("textbookPanelStore", () => {
       mode: "materials",
       selectedPage: 1,
       selectedTextbookId: "",
+      thumbnailsCollapsed: false,
     });
+  });
+
+  it("サムネイルの折りたたみ状態をノートごとに保持する", () => {
+    const store = useTextbookPanelStore();
+
+    store.setThumbnailsCollapsed("note-a", true);
+
+    expect(store.stateForNote("note-a").thumbnailsCollapsed).toBe(true);
+    expect(store.stateForNote("note-b").thumbnailsCollapsed).toBe(false);
   });
 
   it("ノートごとに資料パネルのモードを保持する", () => {

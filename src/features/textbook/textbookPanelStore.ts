@@ -10,6 +10,7 @@ export interface TextbookPanelState {
   mode: MaterialPanelMode;
   selectedPage: number;
   selectedTextbookId: string;
+  thumbnailsCollapsed: boolean;
   tocByMaterialId: Record<string, MaterialTocItem[]>;
 }
 
@@ -30,6 +31,7 @@ const createStateForNote = (statesByNoteId: Ref<TextbookPanelStates>): StateForN
         mode: "materials",
         selectedPage: 1,
         selectedTextbookId: "",
+        thumbnailsCollapsed: false,
         tocByMaterialId: {},
       };
     }
@@ -48,6 +50,9 @@ const createSelectionActions = (stateForNote: StateForNote) => ({
   },
   setMode: (noteId: string, mode: MaterialPanelMode) => {
     stateForNote(noteId).mode = mode;
+  },
+  setThumbnailsCollapsed: (noteId: string, collapsed: boolean) => {
+    stateForNote(noteId).thumbnailsCollapsed = collapsed;
   },
 });
 

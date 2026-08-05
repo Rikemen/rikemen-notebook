@@ -12,6 +12,22 @@ const createDocument = (): LoadedPdfDocument => ({
   }),
 });
 
+const dispatchPointer = (
+  element: Element,
+  type: "pointerdown" | "pointermove" | "pointerup",
+  pointerId: number,
+  clientX: number,
+) => {
+  const event = new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    clientX,
+    clientY: 0,
+  });
+  Object.defineProperty(event, "pointerId", { value: pointerId });
+  element.dispatchEvent(event);
+};
+
 describe("TextbookPreview", () => {
   it("PDF.jsで選択した実PDFページをcanvasへ描画する", async () => {
     const pdfDocument = createDocument();
@@ -96,5 +112,84 @@ describe("TextbookPreview", () => {
 
     expect(wrapper.find("object").exists()).toBe(false);
     expect(wrapper.text()).toContain("プレビューするPDFを選択してください");
+  });
+
+  it("最大化時はボタンでPDFを拡大縮小して100%へ戻す", async () => {
+    const pdfDocument = createDocument();
+    const wrapper = mount(TextbookPreview, {
+      props: {
+        page: 1,
+        pdfDocument,
+        sourceUrl: "blob:https://example.com/material-zoom",
+        textbookTitle: "解析.pdf",
+        zoomEnabled: true,
+      },
+    });
+    await flushPromises();
+
+    expect(wrapper.get("[data-testid='pdf-zoom-status']").text()).toBe("100%");
+    expect(wrapper.find("[aria-label='PDFを拡大']").exists()).toBe(true);
+    await wrapper.get("[aria-label='PDFを拡大']").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.get("[data-testid='pdf-zoom-status']").text()).toBe("125%");
+    expect(pdfDocument.renderPage).toHaveBeenLastCalledWith(expect.any(HTMLCanvasElement), 1, 900);
+
+    await wrapper.get("[aria-label='PDFを100%に戻す']").trigger("click");
+    await flushPromises();
+    expect(wrapper.get("[data-testid='pdf-zoom-status']").text()).toBe("100%");
+    expect(pdfDocument.renderPage).toHaveBeenLastCalledWith(expect.any(HTMLCanvasElement), 1, 720);
+  });
+
+  it("最大化解除またはPDF未準備ではズーム操作を無効にする", async () => {
+    const wrapper = mount(TextbookPreview, {
+      props: {
+        page: 1,
+        pdfDocument: createDocument(),
+        sourceUrl: "blob:https://example.com/material-reset",
+        textbookTitle: "解析.pdf",
+        zoomEnabled: true,
+      },
+    });
+    await flushPromises();
+    await wrapper.get("[aria-label='PDFを拡大']").trigger("click");
+    await flushPromises();
+
+    await wrapper.setProps({ zoomEnabled: false });
+    await flushPromises();
+    expect(wrapper.find("[aria-label='PDFを拡大']").exists()).toBe(false);
+
+    await wrapper.setProps({ pdfDocument: null, zoomEnabled: true });
+    await flushPromises();
+    expect(wrapper.find("[aria-label='PDFを拡大']").exists()).toBe(false);
+  });
+
+  it("2本指の距離変化でズームし、終了後は追跡を止める", async () => {
+    const pdfDocument = createDocument();
+    const wrapper = mount(TextbookPreview, {
+      props: {
+        page: 1,
+        pdfDocument,
+        sourceUrl: "blob:https://example.com/material-pinch",
+        textbookTitle: "解析.pdf",
+        zoomEnabled: true,
+      },
+    });
+    await flushPromises();
+    const document = wrapper.get(".textbook-preview__document");
+
+    dispatchPointer(document.element, "pointerdown", 1, 0);
+    dispatchPointer(document.element, "pointerdown", 2, 100);
+    dispatchPointer(document.element, "pointermove", 2, 200);
+    await flushPromises();
+
+    expect(wrapper.get("[data-testid='pdf-zoom-status']").text()).toBe("200%");
+    expect(pdfDocument.renderPage).toHaveBeenLastCalledWith(expect.any(HTMLCanvasElement), 1, 1440);
+
+    const renderCalls = vi.mocked(pdfDocument.renderPage).mock.calls.length;
+    dispatchPointer(document.element, "pointerup", 1, 0);
+    dispatchPointer(document.element, "pointermove", 2, 250);
+    await flushPromises();
+    expect(pdfDocument.renderPage).toHaveBeenCalledTimes(renderCalls);
   });
 });

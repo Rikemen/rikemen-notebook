@@ -311,6 +311,71 @@ describe("TextbookPanel", () => {
     expect(otherNote.findAll(".textbook-list__item")).toHaveLength(0);
   });
 
+  it("サムネイルの折りたたみ状態を同じノートで保持する", async () => {
+    const pinia = createPinia();
+    const first = mount(TextbookPanel, {
+      global: {
+        plugins: [pinia],
+      },
+      props: {
+        noteId: "note-thumbnails",
+        pdfLoader: createPdfLoader(6),
+      },
+    });
+    const input = first.get("input");
+    Object.defineProperty(input.element, "files", {
+      value: [createSizedFile(2 * 1024 * 1024)],
+    });
+    await input.trigger("change");
+    await flushPromises();
+
+    await first.get("[aria-label='サムネイルを最小化']").trigger("click");
+    expect(first.get(".textbook-panel__body--preview").classes()).toContain(
+      "textbook-panel__body--thumbnails-collapsed",
+    );
+    first.unmount();
+
+    const restored = mount(TextbookPanel, {
+      global: {
+        plugins: [pinia],
+      },
+      props: {
+        noteId: "note-thumbnails",
+        pdfLoader: createPdfLoader(6),
+      },
+    });
+    await flushPromises();
+
+    expect(restored.find(".thumbnail-strip__grid").exists()).toBe(false);
+    expect(restored.find("[aria-label='サムネイルを表示']").exists()).toBe(true);
+  });
+
+  it("最大化時はサムネイルを左レール向けの縦表示にする", async () => {
+    const wrapper = mount(TextbookPanel, {
+      global: {
+        plugins: [createPinia()],
+      },
+      props: {
+        isMaximized: true,
+        noteId: "note-maximized",
+        pdfLoader: createPdfLoader(6),
+      },
+    });
+    const input = wrapper.get("input");
+    Object.defineProperty(input.element, "files", {
+      value: [createSizedFile(2 * 1024 * 1024)],
+    });
+
+    await input.trigger("change");
+    await flushPromises();
+
+    expect(wrapper.classes()).toContain("textbook-panel--maximized");
+    expect(wrapper.get(".textbook-panel__body--preview").classes()).toContain(
+      "textbook-panel__body--preview-maximized",
+    );
+    expect(wrapper.get(".thumbnail-strip").classes()).toContain("thumbnail-strip--vertical");
+  });
+
   it("ログイン時は保存済み教材を現在のノートへ復元する", async () => {
     const repository: TextbookRepository = {
       list: vi.fn().mockResolvedValue([

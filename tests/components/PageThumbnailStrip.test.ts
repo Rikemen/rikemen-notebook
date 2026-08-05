@@ -5,6 +5,43 @@ import PageThumbnailStrip from "@/components/textbook/PageThumbnailStrip.vue";
 const pages = Array.from({ length: 30 }, (_value, index) => index + 1);
 
 describe("PageThumbnailStrip", () => {
+  it("サムネイル一覧を折りたたんで選択ページ情報だけを残す", async () => {
+    const wrapper = mount(PageThumbnailStrip, {
+      props: {
+        collapsed: false,
+        pages,
+        selectedPage: 7,
+      },
+    });
+
+    const toggle = wrapper.get("[aria-label='サムネイルを最小化']");
+    expect(toggle.attributes("aria-expanded")).toBe("true");
+    expect(wrapper.find(".thumbnail-strip__grid").exists()).toBe(true);
+
+    await toggle.trigger("click");
+
+    expect(wrapper.emitted("update:collapsed")?.[0]).toEqual([true]);
+    await wrapper.setProps({ collapsed: true });
+    expect(wrapper.find(".thumbnail-strip__grid").exists()).toBe(false);
+    expect(wrapper.find("[aria-label='サムネイルページ切り替え']").exists()).toBe(false);
+    expect(wrapper.get("[data-testid='thumbnail-selection-status']").text()).toContain("7 / 30");
+    expect(wrapper.get("[aria-label='サムネイルを表示']").attributes("aria-expanded")).toBe("false");
+  });
+
+  it("最大化用の縦レールへ切り替える", () => {
+    const wrapper = mount(PageThumbnailStrip, {
+      props: {
+        orientation: "vertical",
+        pages,
+        selectedPage: 1,
+      },
+    });
+
+    expect(wrapper.classes()).toContain("thumbnail-strip--vertical");
+    expect(wrapper.findAll(".thumbnail-strip__item")).toHaveLength(12);
+    expect(wrapper.get("[data-testid='thumbnail-page-1']").attributes("aria-current")).toBe("page");
+  });
+
   it("サムネイルを12枚ずつページ送りする", async () => {
     const wrapper = mount(PageThumbnailStrip, {
       props: {
