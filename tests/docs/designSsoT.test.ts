@@ -35,6 +35,14 @@ describe("designSsoT", () => {
     expect(design).toContain("編集 / 削除");
   });
 
+  it("資料プレビューとワークスペース操作の拡張仕様を定義する", () => {
+    expect(design).toContain("サムネイル一覧を折りたたみ");
+    expect(design).toContain("左約1/8");
+    expect(design).toContain("100%〜400%");
+    expect(design).toContain("ドッキング / 自由配置のアイコンボタン");
+    expect(design).toContain("`Esc` または同じボタンで復元");
+  });
+
   it("最大化した各パネルの本文が画面下端まで広がる", () => {
     expect(design).toContain("タイトルバーを除く残りの高さ");
     expect(design).toContain("画面下端");
