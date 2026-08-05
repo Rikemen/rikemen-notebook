@@ -8,6 +8,8 @@ describe("firebaseEmulator", () => {
     expect(firebaseSource).toContain("connectAuthEmulator");
     expect(firebaseSource).toContain("connectFirestoreEmulator");
     expect(firebaseSource).toContain("connectFunctionsEmulator");
+    expect(firebaseSource).toContain("connectStorageEmulator");
     expect(firebaseSource).toContain('"127.0.0.1", 5001');
+    expect(firebaseSource).toContain('"127.0.0.1", 9199');
   });
 });

@@ -4,8 +4,10 @@
       v-if="!maximizedPanel"
       :autosave-status="autosaveStatus"
       :current-user="currentUser"
+      :layout-mode="layoutMode"
       :note-title="noteTitle"
       :panel-visibility="panelVisibility"
+      @select-layout-mode="setLayoutMode"
       @toggle-panel="togglePanelVisibility"
     />
 
@@ -14,10 +16,6 @@
       class="workspace-view__stage"
       :class="{ 'workspace-view__stage--maximized': maximizedPanel }"
     >
-      <div v-if="!maximizedPanel" class="workspace-view__toolbar" role="toolbar" aria-label="ワークスペース表示モード">
-        <button type="button" :aria-pressed="layoutMode === 'docked'" @click="setDockedMode">ドッキング</button>
-        <button type="button" :aria-pressed="layoutMode === 'free'" @click="setFreeMode">自由配置</button>
-      </div>
       <div ref="panelGridRef" class="workspace-view__panel-grid" :class="panelGridClass">
         <MovablePanel
           v-for="panel in visiblePanels"
@@ -32,7 +30,12 @@
           @resize="resizePanel"
           @restore="restorePanel"
         >
-          <TextbookPanel v-if="panel.id === 'textbook'" :current-user="currentUser" :note-id="noteId" />
+          <TextbookPanel
+            v-if="panel.id === 'textbook'"
+            :current-user="currentUser"
+            :is-maximized="panel.state === 'maximized'"
+            :note-id="noteId"
+          />
           <WhiteboardPanel v-else-if="panel.id === 'whiteboard'" :note-id="noteId" />
           <AiChatPanel v-else-if="panel.id === 'ai-chat'" :current-user="currentUser" :note-id="noteId" />
           <DiagramCodePanel v-else :note-id="noteId" />
@@ -45,7 +48,7 @@
 
 <script lang="ts">
 /* eslint-disable max-lines, max-lines-per-function, max-statements, no-ternary */
-import { computed, defineComponent, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, defineComponent, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { mapFirebaseUser } from "@/features/auth/mapFirebaseUser";
 import { createAutosaveStatus } from "@/features/notes/autosaveStatus";
@@ -112,6 +115,11 @@ export default defineComponent({
       "workspace-view__panel-grid--free": layoutMode.value === "free",
       "workspace-view__panel-grid--maximized": Boolean(maximizedPanel.value),
     }));
+    const handleWorkspaceKeydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && maximizedPanel.value) {
+        workspaceStore.restoreLayoutPanel(noteId.value, maximizedPanel.value.id);
+      }
+    };
 
     const updateStageBounds = () => {
       const width = panelGridRef.value?.clientWidth ?? workspaceDefaultBounds.width;
@@ -126,9 +134,11 @@ export default defineComponent({
     onMounted(() => {
       updateStageBounds();
       window.addEventListener("resize", updateStageBounds);
+      window.addEventListener("keydown", handleWorkspaceKeydown);
     });
     onBeforeUnmount(() => {
       window.removeEventListener("resize", updateStageBounds);
+      window.removeEventListener("keydown", handleWorkspaceKeydown);
     });
 
     const movePanel = (panelId: WorkspacePanelId, nextPosition: Pick<PanelBounds, "x" | "y">) =>
@@ -141,12 +151,11 @@ export default defineComponent({
     const restorePanel = (panelId: WorkspacePanelId) => workspaceStore.restoreLayoutPanel(noteId.value, panelId);
     const closePanel = (panelId: WorkspacePanelId) => workspaceStore.closeLayoutPanel(noteId.value, panelId);
     const togglePanelVisibility = (panelId: WorkspacePanelId) => workspaceStore.toggleLayoutPanelVisibility(noteId.value, panelId);
-    const setLayoutMode = (mode: WorkspaceLayoutMode) => {
+    const setLayoutMode = async (mode: WorkspaceLayoutMode) => {
       workspaceStore.setLayoutMode(noteId.value, mode);
+      await nextTick();
       updateStageBounds();
     };
-    const setDockedMode = () => setLayoutMode("docked");
-    const setFreeMode = () => setLayoutMode("free");
 
     return {
       autosaveStatus: createAutosaveStatus(),
@@ -166,8 +175,7 @@ export default defineComponent({
       panelVisibility,
       resizePanel,
       restorePanel,
-      setDockedMode,
-      setFreeMode,
+      setLayoutMode,
       togglePanelVisibility,
       visiblePanels,
     };
@@ -194,7 +202,7 @@ export default defineComponent({
   position: relative;
   display: grid;
   flex: 1;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: var(--space-3);
   box-sizing: border-box;
   width: 100%;
@@ -209,28 +217,6 @@ export default defineComponent({
   gap: 0;
   padding: 0;
 }
-.workspace-view__toolbar {
-  display: flex;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.workspace-view__toolbar button {
-  min-height: 2rem;
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-raised-sm);
-  color: var(--color-text-secondary);
-  font-size: 0.8rem;
-  font-weight: 700;
-  padding: 0 var(--space-3);
-}
-
-.workspace-view__toolbar button[aria-pressed="true"] {
-  box-shadow: var(--shadow-inset);
-  color: var(--color-blue);
-}
-
 .workspace-view__panel-grid {
   position: relative;
   box-sizing: border-box;

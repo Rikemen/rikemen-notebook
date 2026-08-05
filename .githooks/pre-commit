@@ -1,0 +1,19 @@
+#!/bin/sh
+
+branch="$(git branch --show-current)"
+
+case "$branch" in
+  main|master)
+    cat >&2 <<'EOF'
+mainブランチではコミットできません。
+未コミットの変更はそのまま残っています。次のように作業ブランチを作成してください。
+
+  git switch -c feat/<task-name>
+
+詳しくはCONTRIBUTING.mdの「mainで作業を始めてしまった場合」を確認してください。
+EOF
+    exit 1
+    ;;
+esac
+
+exit 0

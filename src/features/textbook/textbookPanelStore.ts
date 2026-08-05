@@ -10,28 +10,28 @@ export interface TextbookPanelState {
   mode: MaterialPanelMode;
   selectedPage: number;
   selectedTextbookId: string;
+  thumbnailsCollapsed: boolean;
   tocByMaterialId: Record<string, MaterialTocItem[]>;
 }
 
 type TextbookPanelStates = Record<string, TextbookPanelState>;
 
 interface TocCommand {
-  initialMaterials: MaterialListItem[];
   item: MaterialTocItem;
   materialId: string;
 }
 
-type StateForNote = (noteId: string, initialMaterials: MaterialListItem[]) => TextbookPanelState;
+type StateForNote = (noteId: string) => TextbookPanelState;
 
 const createStateForNote = (statesByNoteId: Ref<TextbookPanelStates>): StateForNote =>
-  (noteId, initialMaterials) => {
+  (noteId) => {
     if (!statesByNoteId.value[noteId]) {
-      const materials = initialMaterials.map((material) => ({ ...material }));
       statesByNoteId.value[noteId] = {
-        materials,
+        materials: [],
         mode: "materials",
         selectedPage: 1,
-        selectedTextbookId: materials[0]?.id ?? "",
+        selectedTextbookId: "",
+        thumbnailsCollapsed: false,
         tocByMaterialId: {},
       };
     }
@@ -40,38 +40,57 @@ const createStateForNote = (statesByNoteId: Ref<TextbookPanelStates>): StateForN
   };
 
 const createSelectionActions = (stateForNote: StateForNote) => ({
-  selectPage: (noteId: string, page: number, initialMaterials: MaterialListItem[]) => {
-    stateForNote(noteId, initialMaterials).selectedPage = page;
+  selectPage: (noteId: string, page: number) => {
+    stateForNote(noteId).selectedPage = page;
   },
-  selectTextbook: (noteId: string, textbookId: string, initialMaterials: MaterialListItem[]) => {
-    const state = stateForNote(noteId, initialMaterials);
+  selectTextbook: (noteId: string, textbookId: string) => {
+    const state = stateForNote(noteId);
     state.selectedTextbookId = textbookId;
     state.selectedPage = 1;
   },
-  setMode: (noteId: string, mode: MaterialPanelMode, initialMaterials: MaterialListItem[]) => {
-    stateForNote(noteId, initialMaterials).mode = mode;
+  setMode: (noteId: string, mode: MaterialPanelMode) => {
+    stateForNote(noteId).mode = mode;
+  },
+  setThumbnailsCollapsed: (noteId: string, collapsed: boolean) => {
+    stateForNote(noteId).thumbnailsCollapsed = collapsed;
   },
 });
 
 const createMaterialActions = (stateForNote: StateForNote) => ({
-  addMaterial: (noteId: string, material: MaterialListItem, initialMaterials: MaterialListItem[]) => {
-    const state = stateForNote(noteId, initialMaterials);
+  addMaterial: (noteId: string, material: MaterialListItem) => {
+    const state = stateForNote(noteId);
     state.materials.push(material);
     state.selectedTextbookId = material.id;
     state.selectedPage = 1;
+  },
+  hydrateMaterials: (noteId: string, materials: MaterialListItem[]) => {
+    const state = stateForNote(noteId);
+    const byId = new Map(state.materials.map((material) => [material.id, material]));
+    materials.forEach((material) => byId.set(material.id, { ...material }));
+    state.materials = [...byId.values()];
+    if (!state.selectedTextbookId && state.materials.length > 0) {
+      state.selectedTextbookId = state.materials[0].id;
+    }
+  },
+  updateMaterial: (noteId: string, materialId: string, patch: Partial<MaterialListItem>) => {
+    const state = stateForNote(noteId);
+    const material = state.materials.find((candidate) => candidate.id === materialId);
+    if (material) {
+      Object.assign(material, patch);
+    }
   },
 });
 
 const createTocActions = (stateForNote: StateForNote) => ({
   addTocItem: (noteId: string, command: TocCommand) => {
-    const state = stateForNote(noteId, command.initialMaterials);
+    const state = stateForNote(noteId);
     state.tocByMaterialId[command.materialId] = addMaterialTocItem(
       state.tocByMaterialId[command.materialId] ?? [],
       command.item,
     );
   },
   openTocItem: (noteId: string, command: TocCommand) => {
-    const state = stateForNote(noteId, command.initialMaterials);
+    const state = stateForNote(noteId);
     state.selectedTextbookId = command.materialId;
     state.selectedPage = command.item.page;
     state.mode = "preview";

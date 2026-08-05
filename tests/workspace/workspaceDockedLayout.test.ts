@@ -43,7 +43,7 @@ describe("workspaceDockedLayout", () => {
       },
     });
 
-    await wrapper.findAll(".workspace-view__toolbar button")[1].trigger("click");
+    await wrapper.get("[aria-label='自由配置表示']").trigger("click");
 
     expect(wrapper.find(".workspace-view__panel-grid--free").exists()).toBe(true);
     expect(wrapper.findAll(".movable-panel--free")).toHaveLength(4);

@@ -13,6 +13,11 @@ export interface TextbookStoragePathParams {
   fileName: string;
 }
 
+export interface NoteMaterialStoragePathParams extends NotePathParams {
+  fileName: string;
+  materialId: string;
+}
+
 export interface ChatThreadMessagePathParams extends NotePathParams {
   messageId: string;
   threadId: string;
@@ -47,6 +52,20 @@ export const chatThreadMessagePath = ({ messageId, noteId, threadId, uid }: Chat
 
 export const whiteboardPagePath = ({ childId, noteId, uid }: NoteChildPathParams) =>
   `${noteDocumentPath({ noteId, uid })}/whiteboardPages/${encodePathSegment(childId)}`;
+
+export const noteMaterialsCollectionPath = ({ noteId, uid }: NotePathParams) =>
+  `${noteDocumentPath({ noteId, uid })}/materials`;
+
+export const noteMaterialDocumentPath = ({ childId, noteId, uid }: NoteChildPathParams) =>
+  `${noteMaterialsCollectionPath({ noteId, uid })}/${encodePathSegment(childId)}`;
+
+export const noteMaterialStoragePath = ({
+  fileName,
+  materialId,
+  noteId,
+  uid,
+}: NoteMaterialStoragePathParams) =>
+  `${userRootPath(uid)}/notes/${encodePathSegment(noteId)}/materials/${encodePathSegment(materialId)}/${encodePathSegment(fileName)}`;
 
 export const workspaceLayoutPath = ({ noteId, uid }: NotePathParams) => `${noteDocumentPath({ noteId, uid })}/workspace/layout`;
 

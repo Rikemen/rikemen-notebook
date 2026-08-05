@@ -4,6 +4,7 @@
       v-for="mode in modes"
       :key="mode.value"
       :aria-pressed="modelValue === mode.value"
+      :disabled="disabledModes.includes(mode.value)"
       :icon="mode.icon"
       :label="mode.label"
       :tooltip="mode.label"
@@ -45,6 +46,10 @@ export default defineComponent({
     AppIconButton,
   },
   props: {
+    disabledModes: {
+      default: () => [],
+      type: Array as PropType<MaterialPanelMode[]>,
+    },
     modelValue: {
       required: true,
       type: String as PropType<MaterialPanelMode>,

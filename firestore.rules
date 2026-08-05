@@ -1,13 +1,37 @@
 rules_version = '2';
 
+// Assumed user-owned data model:
+// - users/{uid}/notes/{noteId}: note metadata
+// - users/{uid}/notes/{noteId}/chatThreads/{threadId}: AI chat thread metadata
+// - users/{uid}/notes/{noteId}/chatThreads/{threadId}/messages/{messageId}: AI messages
+// - users/{uid}/notes/{noteId}/whiteboardPages/{pageId}: whiteboard pages
+// - users/{uid}/notes/{noteId}/workspace/{layoutId}: workspace layout
+// - users/{uid}/notes/{noteId}/materials/{materialId}: immutable PDF metadata
+// - users/{uid}/aiUsage/{date}: server-only quota records
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isSignedIn() {
+    function isAuthenticated() {
       return request.auth != null;
     }
 
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
     function ownsUserPath(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+      return isOwner(userId);
+    }
+
+    function uidUnchanged(userId) {
+      return request.resource.data.ownerUid == userId;
+    }
+
+    function uidNotModified() {
+      return request.resource.data.ownerUid == resource.data.ownerUid;
+    }
+
+    function noteExists(userId, noteId) {
+      return exists(/databases/$(database)/documents/users/$(userId)/notes/$(noteId));
     }
 
     function hasAllowedNoteFields() {
@@ -106,6 +130,62 @@ service cloud.firestore {
         && data.createdAt.size() <= 40;
     }
 
+    function hasValidMaterial(userId, noteId, materialId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          "contentType",
+          "createdAt",
+          "fileName",
+          "noteId",
+          "ownerUid",
+          "pageCount",
+          "sizeBytes",
+          "storagePath"
+        ])
+        && data.keys().hasAll([
+          "contentType",
+          "createdAt",
+          "fileName",
+          "noteId",
+          "ownerUid",
+          "pageCount",
+          "sizeBytes",
+          "storagePath"
+        ])
+        && uidUnchanged(userId)
+        && data.noteId == noteId
+        && data.contentType == "application/pdf"
+        && data.createdAt is string
+        && data.createdAt.size() > 0
+        && data.createdAt.size() <= 40
+        && data.fileName is string
+        && data.fileName.size() > 0
+        && data.fileName.size() <= 240
+        && data.ownerUid is string
+        && data.ownerUid.size() > 0
+        && data.ownerUid.size() <= 128
+        && data.noteId is string
+        && data.noteId.size() > 0
+        && data.noteId.size() <= 128
+        && data.pageCount is int
+        && data.pageCount > 0
+        && data.pageCount <= 100000
+        && data.sizeBytes is int
+        && data.sizeBytes > 0
+        && data.sizeBytes <= 5368709120
+        && data.storagePath is string
+        && data.storagePath.size() > 0
+        && data.storagePath.size() <= 1024
+        && data.storagePath.matches(
+          "^users/" + userId + "/notes/" + noteId + "/materials/" + materialId + "/[^/]+$"
+        );
+    }
+
+    function hasUnchangedMaterialIdentity() {
+      return uidNotModified()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([]);
+    }
+
     match /users/{userId} {
       allow read, write: if ownsUserPath(userId);
 
@@ -134,6 +214,18 @@ service cloud.firestore {
 
         match /workspace/{layoutId} {
           allow read, write: if ownsUserPath(userId);
+        }
+
+        match /materials/{materialId} {
+          allow read: if ownsUserPath(userId) && noteExists(userId, noteId);
+          allow create: if ownsUserPath(userId)
+            && noteExists(userId, noteId)
+            && hasValidMaterial(userId, noteId, materialId);
+          allow update: if ownsUserPath(userId)
+            && noteExists(userId, noteId)
+            && hasValidMaterial(userId, noteId, materialId)
+            && hasUnchangedMaterialIdentity();
+          allow delete: if ownsUserPath(userId);
         }
       }
 

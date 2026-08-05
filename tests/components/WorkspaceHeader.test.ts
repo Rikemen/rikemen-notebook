@@ -3,6 +3,21 @@ import { describe, expect, it } from "vitest";
 import WorkspaceHeader from "@/components/workspace/WorkspaceHeader.vue";
 
 describe("WorkspaceHeader", () => {
+  it("ドッキングと自由配置をアイコンで切り替える", async () => {
+    const wrapper = mount(WorkspaceHeader, {
+      props: {
+        layoutMode: "docked",
+      },
+    });
+
+    expect(wrapper.get("[aria-label='ドッキング表示']").attributes("aria-pressed")).toBe("true");
+    expect(wrapper.get("[aria-label='自由配置表示']").attributes("aria-pressed")).toBe("false");
+
+    await wrapper.get("[aria-label='自由配置表示']").trigger("click");
+
+    expect(wrapper.emitted("select-layout-mode")?.[0]).toEqual(["free"]);
+  });
+
   it("4つのパネル表示ボタンと既存の操作を持つ", async () => {
     const wrapper = mount(WorkspaceHeader, {
       props: {

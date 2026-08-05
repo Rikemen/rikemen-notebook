@@ -1,5 +1,12 @@
 <template>
-  <button class="app-icon-button" :aria-label="label" :title="tooltip || label" :type="type" @click="$emit('click', $event)">
+  <button
+    class="app-icon-button"
+    :aria-label="label"
+    :disabled="disabled"
+    :title="tooltip || label"
+    :type="type"
+    @click="$emit('click', $event)"
+  >
     <span class="material-symbols-outlined text-base" aria-hidden="true">{{ icon }}</span>
   </button>
 </template>
@@ -12,6 +19,10 @@ type ButtonType = "button" | "submit" | "reset";
 export default defineComponent({
   name: "AppIconButton",
   props: {
+    disabled: {
+      default: false,
+      type: Boolean,
+    },
     icon: {
       required: true,
       type: String,
@@ -51,9 +62,14 @@ export default defineComponent({
   color: var(--color-blue);
 }
 
+.app-icon-button:disabled {
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .app-icon-button:focus-visible {
   outline: none;
   box-shadow: var(--shadow-focus);
 }
 </style>
-

@@ -105,4 +105,55 @@ describe("WorkspaceView", () => {
     expect(wrapper.findAll(".movable-panel__body--maximized")).toHaveLength(1);
     expect(wrapper.find("[aria-label='復元']").exists()).toBe(true);
   });
+
+  it("資料パネルの最大化状態をTextbookPanelへ渡す", async () => {
+    window.localStorage.clear();
+    const wrapper = mount(WorkspaceView, {
+      global: {
+        plugins: [createPinia()],
+      },
+    });
+
+    expect(wrapper.findComponent({ name: "TextbookPanel" }).props("isMaximized")).toBe(false);
+
+    await wrapper.get("[data-panel-id='textbook'] [aria-label='最大化']").trigger("click");
+
+    expect(wrapper.findComponent({ name: "TextbookPanel" }).props("isMaximized")).toBe(true);
+  });
+
+  it("ヘッダーから表示モードを切り替えて旧ツールバーを残さない", async () => {
+    window.localStorage.clear();
+    const wrapper = mount(WorkspaceView, {
+      global: {
+        plugins: [createPinia()],
+      },
+    });
+
+    expect(wrapper.find(".workspace-view__toolbar").exists()).toBe(false);
+    expect(wrapper.get("[aria-label='ドッキング表示']").attributes("aria-pressed")).toBe("true");
+
+    await wrapper.get("[aria-label='自由配置表示']").trigger("click");
+
+    expect(wrapper.get("[aria-label='自由配置表示']").attributes("aria-pressed")).toBe("true");
+    expect(wrapper.get(".workspace-view__panel-grid").classes()).toContain("workspace-view__panel-grid--free");
+  });
+
+  it("Escapeで最大化パネルを復元する", async () => {
+    window.localStorage.clear();
+    const wrapper = mount(WorkspaceView, {
+      global: {
+        plugins: [createPinia()],
+      },
+    });
+
+    await wrapper.get("[data-panel-id='whiteboard'] [aria-label='最大化']").trigger("click");
+    expect(wrapper.classes()).toContain("workspace-view--maximized");
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.classes()).not.toContain("workspace-view--maximized");
+    expect(wrapper.findComponent({ name: "WorkspaceHeader" }).exists()).toBe(true);
+    expect(wrapper.findAll(".movable-panel")).toHaveLength(4);
+  });
 });

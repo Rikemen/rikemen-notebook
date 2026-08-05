@@ -39,4 +39,22 @@ describe("firestoreRules", () => {
   it("ノート配下を再帰wildcardで一括許可しない", () => {
     expect(rules).not.toContain("match /{document=**} {\n          allow read, write: if ownsUserPath(userId)");
   });
+
+  it("教材metadataを所有者・ノート・厳格なschemaで保護する", () => {
+    expect(rules).toContain("match /materials/{materialId}");
+    expect(rules).toContain("hasValidMaterial(userId, noteId, materialId)");
+    expect(rules).toContain("data.keys().hasOnly([");
+    expect(rules).toContain('data.contentType == "application/pdf"');
+    expect(rules).toContain("data.ownerUid == userId");
+    expect(rules).toContain("data.noteId == noteId");
+    expect(rules).toContain("data.fileName.size() <= 240");
+    expect(rules).toContain("data.pageCount <= 100000");
+    expect(rules).toContain("data.sizeBytes <= 5368709120");
+    expect(rules).toContain("hasUnchangedMaterialIdentity()");
+  });
+
+  it("教材作成と読込には親ノートの存在を要求する", () => {
+    expect(rules).toContain("function noteExists(userId, noteId)");
+    expect(rules).toContain("noteExists(userId, noteId)");
+  });
 });

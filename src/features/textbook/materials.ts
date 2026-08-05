@@ -1,34 +1,50 @@
+import type { SavedTextbook } from "@/features/textbook/textbookRepository";
+import type { AuthUser } from "@/features/auth/types";
+
+export type MaterialStatus = "error" | "saved" | "saving" | "temporary";
+
 export interface MaterialListItem {
   id: string;
   pageCount: number;
   sizeLabel: string;
+  sourceUrl?: string;
+  status?: MaterialStatus;
+  storagePath?: string;
   title: string;
   uploadedAt: string;
 }
 
-export const sampleMaterials: MaterialListItem[] = [
-  {
-    id: "calculus-applied",
-    pageCount: 6,
-    sizeLabel: "23.4 MB",
-    title: "微分積分学（偏微分から応用）.pdf",
-    uploadedAt: "2024/05/12",
-  },
-  {
-    id: "linear-math",
-    pageCount: 6,
-    sizeLabel: "18.7 MB",
-    title: "線形代数学入門 第3版.pdf",
-    uploadedAt: "2024/05/10",
-  },
-  {
-    id: "multi-analysis",
-    pageCount: 6,
-    sizeLabel: "15.2 MB",
-    title: "多変量解析の基礎.pdf",
-    uploadedAt: "2024/05/08",
-  },
-];
+export type PdfFileValidationResult =
+  | { ok: true }
+  | {
+      message: string;
+      ok: false;
+    };
+
+export const validatePdfFile = (file: File, limitBytes: number): PdfFileValidationResult => {
+  if (file.size <= 0) {
+    return {
+      message: "空のPDFは選択できません。",
+      ok: false,
+    };
+  }
+
+  if (file.type !== "application/pdf") {
+    return {
+      message: "PDF形式のファイルを選択してください。",
+      ok: false,
+    };
+  }
+
+  if (file.size > limitBytes) {
+    return {
+      message: "file-too-large",
+      ok: false,
+    };
+  }
+
+  return { ok: true };
+};
 
 const formatDate = (date: Date) => {
   const year = date.getFullYear();
@@ -42,14 +58,54 @@ export const formatMaterialSize = (bytes: number) => {
   return `${Math.max(megabytes, 0.01).toFixed(1)} MB`;
 };
 
+export const materialStatusLabel = (status: MaterialStatus | undefined) => {
+  const labels: Record<MaterialStatus, string> = {
+    error: "保存失敗",
+    saved: "保存済み",
+    saving: "保存中",
+    temporary: "一時利用",
+  };
+  if (!status) {
+    return "";
+  }
+  return labels[status];
+};
+
+export const materialUploadStatus = (user: AuthUser | null): MaterialStatus => {
+  if (user) {
+    return "saving";
+  }
+  return "temporary";
+};
+
+interface CreateMaterialOptions {
+  pageCount?: number;
+  sourceUrl?: string;
+  status?: MaterialStatus;
+  uploadedAt?: Date;
+}
+
 export const createMaterialFromFile = (
   file: File,
   id: string,
-  uploadedAt = new Date(),
+  options: CreateMaterialOptions = {},
 ): MaterialListItem => ({
   id,
-  pageCount: 6,
+  pageCount: options.pageCount ?? 1,
   sizeLabel: formatMaterialSize(file.size),
+  sourceUrl: options.sourceUrl,
+  status: options.status,
   title: file.name,
-  uploadedAt: formatDate(uploadedAt),
+  uploadedAt: formatDate(options.uploadedAt ?? new Date()),
+});
+
+export const createMaterialFromSavedTextbook = (textbook: SavedTextbook): MaterialListItem => ({
+  id: textbook.id,
+  pageCount: textbook.pageCount,
+  sizeLabel: formatMaterialSize(textbook.sizeBytes),
+  sourceUrl: textbook.sourceUrl,
+  status: "saved",
+  storagePath: textbook.storagePath,
+  title: textbook.fileName,
+  uploadedAt: formatDate(new Date(textbook.createdAt)),
 });
