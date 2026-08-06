@@ -55,4 +55,22 @@ describe("WorkspaceHeader", () => {
     await wrapper.get(".workspace-panel-toggle[data-panel-id='diagram-code']").trigger("click");
     expect(wrapper.emitted("toggle-panel")?.[0]).toEqual(["diagram-code"]);
   });
+
+  it("未保存・保存中・失敗・保存済みを実際の保存状態で切り替える", async () => {
+    const wrapper = mount(WorkspaceHeader, {
+      props: {
+        autosaveStatus: { errorMessage: "", savedAt: null, state: "dirty" },
+      },
+    });
+    expect(wrapper.get("[data-testid='save-whiteboard']").text()).toBe("保存する");
+    await wrapper.get("[data-testid='save-whiteboard']").trigger("click");
+    expect(wrapper.emitted("save-now")).toHaveLength(1);
+
+    await wrapper.setProps({ autosaveStatus: { errorMessage: "", savedAt: null, state: "saving" } });
+    expect(wrapper.text()).toContain("保存中…");
+    await wrapper.setProps({ autosaveStatus: { errorMessage: "offline", savedAt: null, state: "failed" } });
+    expect(wrapper.get("[data-testid='retry-whiteboard-save']").text()).toBe("再試行");
+    await wrapper.setProps({ autosaveStatus: { errorMessage: "", savedAt: "2026-08-06", state: "saved" } });
+    expect(wrapper.text()).toContain("自動保存済み");
+  });
 });

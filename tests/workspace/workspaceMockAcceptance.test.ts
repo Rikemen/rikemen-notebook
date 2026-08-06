@@ -1,5 +1,5 @@
 import { createPinia, setActivePinia } from "pinia";
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 import type { User } from "firebase/auth";
 import WorkspaceView from "@/views/WorkspaceView.vue";
@@ -29,7 +29,6 @@ describe("workspaceMockAcceptance", () => {
         },
       },
     });
-
     expect(wrapper.find("header.workspace-header").exists()).toBe(true);
     expect(wrapper.find("[aria-label='ノートワークスペース']").exists()).toBe(true);
     expect(wrapper.find("[data-panel-id='textbook']").exists()).toBe(true);
@@ -69,6 +68,7 @@ describe("workspaceMockAcceptance", () => {
         plugins: [pinia],
       },
     });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
 
     await wrapper.get("[data-testid='whiteboard-markdown']").setValue("# 閉じても残るノート");
     await wrapper.get("[data-testid='ai-prompt']").setValue("閉じても残る質問");
@@ -78,6 +78,7 @@ describe("workspaceMockAcceptance", () => {
     const panelIds = ["textbook", "whiteboard", "ai-chat", "diagram-code"];
     for (const panelId of panelIds) {
       await wrapper.get(`.movable-panel[data-panel-id='${panelId}'] [aria-label='閉じる']`).trigger("click");
+      await flushPromises();
     }
 
     expect(wrapper.findAll(".movable-panel")).toHaveLength(0);
@@ -92,5 +93,6 @@ describe("workspaceMockAcceptance", () => {
     expect(wrapper.findAll(".textbook-list__item")[0].classes()).toContain("textbook-list__item--selected");
     expect((wrapper.get("[data-testid='ai-prompt']").element as HTMLInputElement).value).toBe("閉じても残る質問");
     expect((wrapper.get("[data-testid='code-editor']").element as HTMLTextAreaElement).value).toBe("function persistedSketch() {}");
+    confirm.mockRestore();
   });
 });

@@ -47,7 +47,23 @@
       <div class="workspace-header__utility-actions">
         <AppIconButton icon="undo" label="元に戻す" />
         <AppIconButton icon="redo" label="やり直す" />
-        <span class="ui-raised hidden rounded-[var(--radius-pill)] px-4 py-2 text-xs text-[var(--color-text-secondary)] sm:inline-flex">自動保存済み</span>
+        <AppButton v-if="autosaveStatus.state === 'dirty'" data-testid="save-whiteboard" variant="primary" @click="$emit('save-now')">保存する</AppButton>
+        <span
+          v-else-if="autosaveStatus.state === 'saving'"
+          aria-live="polite"
+          class="ui-raised hidden rounded-[var(--radius-pill)] px-4 py-2 text-xs text-[var(--color-text-secondary)] sm:inline-flex"
+          >保存中…</span
+        >
+        <div v-else-if="autosaveStatus.state === 'failed'" class="workspace-header__save-error" aria-live="assertive">
+          <AppButton data-testid="retry-whiteboard-save" variant="primary" @click="$emit('save-now')">再試行</AppButton>
+          <span class="sr-only">{{ autosaveStatus.errorMessage }}</span>
+        </div>
+        <span
+          v-else
+          aria-live="polite"
+          class="ui-raised hidden rounded-[var(--radius-pill)] px-4 py-2 text-xs text-[var(--color-text-secondary)] sm:inline-flex"
+          >自動保存済み</span
+        >
         <AppButton variant="primary">共有</AppButton>
         <span class="ui-raised flex h-10 w-10 items-center justify-center rounded-full font-bold text-[var(--color-blue)]">{{ userInitial }}</span>
       </div>
@@ -58,6 +74,7 @@
 <script lang="ts">
 import { computed, defineComponent, type PropType } from "vue";
 import type { AuthUser } from "@/features/auth/types";
+import { createAutosaveStatus, type AutosaveStatus } from "@/features/notes/autosaveStatus";
 import { APP_NAME } from "@/config/appBrand";
 import { workspacePanels, type WorkspacePanelId, type WorkspacePanelVisibility } from "@/features/workspace/panels";
 import type { WorkspaceLayoutMode } from "@/features/workspace/panelLayout";
@@ -79,8 +96,8 @@ export default defineComponent({
   },
   props: {
     autosaveStatus: {
-      default: null,
-      type: Object,
+      default: createAutosaveStatus,
+      type: Object as PropType<AutosaveStatus>,
     },
     currentUser: {
       default: null,
@@ -100,6 +117,7 @@ export default defineComponent({
     },
   },
   emits: {
+    "save-now": () => true,
     "select-layout-mode": (mode: WorkspaceLayoutMode) => mode === "docked" || mode === "free",
     "toggle-panel": (panelId: WorkspacePanelId) => workspacePanels.some((panel) => panel.id === panelId),
   },
@@ -173,6 +191,11 @@ export default defineComponent({
 .workspace-header__layout-mode {
   padding-right: var(--space-2);
   border-right: 1px solid var(--color-border);
+}
+
+.workspace-header__save-error {
+  align-items: center;
+  display: flex;
 }
 
 .workspace-header__layout-mode :deep(.app-icon-button[aria-pressed="true"]) {

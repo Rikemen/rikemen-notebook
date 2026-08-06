@@ -4,6 +4,8 @@ export interface WhiteboardPage {
   title: string;
   markdown: string;
   createdAt: string;
+  revision: number;
+  updatedAt: string;
 }
 
 export interface WhiteboardState {
@@ -12,12 +14,15 @@ export interface WhiteboardState {
 }
 
 export const createInitialWhiteboardState = (noteId: string): WhiteboardState => {
+  const timestamp = new Date().toISOString();
   const page: WhiteboardPage = {
-    createdAt: new Date().toISOString(),
+    createdAt: timestamp,
     id: "page-1",
     markdown: "# ノート\n\nここにMarkdownで記入できます。",
     noteId,
+    revision: 0,
     title: "ページ 1",
+    updatedAt: timestamp,
   };
 
   return {
@@ -28,12 +33,15 @@ export const createInitialWhiteboardState = (noteId: string): WhiteboardState =>
 
 export const addWhiteboardPage = (state: WhiteboardState, noteId: string): WhiteboardState => {
   const nextPageNumber = state.pages.length + 1;
+  const timestamp = new Date().toISOString();
   const page: WhiteboardPage = {
-    createdAt: new Date().toISOString(),
+    createdAt: timestamp,
     id: `page-${nextPageNumber}`,
     markdown: "",
     noteId,
+    revision: 1,
     title: `ページ ${nextPageNumber}`,
+    updatedAt: timestamp,
   };
 
   return {
