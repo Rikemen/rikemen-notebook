@@ -23,4 +23,17 @@ describe("storageRules", () => {
     expect(rules).toContain("fileName.size() <= 240");
     expect(rules).toContain("materialId.size() <= 128");
   });
+
+  it("資料画像はPNG/JPEGだけを許可する", () => {
+    expect(rules).toContain('["application/pdf", "image/png", "image/jpeg"]');
+    expect(rules).not.toContain("image/svg+xml");
+  });
+
+  it("手書きは固定名のPNGとJSONだけを容量制限付きで許可する", () => {
+    expect(rules).toContain("/whiteboardDrawings/{drawingId}/{fileName}");
+    expect(rules).toContain('fileName == "preview.png"');
+    expect(rules).toContain("request.resource.size <= 10485760");
+    expect(rules).toContain('fileName == "strokes.json"');
+    expect(rules).toContain("request.resource.size <= 2097152");
+  });
 });
