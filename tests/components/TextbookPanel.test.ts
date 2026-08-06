@@ -259,9 +259,7 @@ describe("TextbookPanel", () => {
     await flushPromises();
 
     expect(wrapper.get(".textbook-preview h3").text()).toContain("25ページ");
-    expect(wrapper.get("[data-testid='thumbnail-page-25']").classes()).toContain(
-      "thumbnail-strip__item--selected",
-    );
+    expect(wrapper.get("[data-testid='thumbnail-page-25']").classes()).toContain("thumbnail-strip__item--selected");
   });
 
   it("同じノートで再マウントしても教材とページの選択を保持する", async () => {
@@ -330,9 +328,7 @@ describe("TextbookPanel", () => {
     await flushPromises();
 
     await first.get("[aria-label='サムネイルを最小化']").trigger("click");
-    expect(first.get(".textbook-panel__body--preview").classes()).toContain(
-      "textbook-panel__body--thumbnails-collapsed",
-    );
+    expect(first.get(".textbook-panel__body--preview").classes()).toContain("textbook-panel__body--thumbnails-collapsed");
     first.unmount();
 
     const restored = mount(TextbookPanel, {
@@ -370,9 +366,7 @@ describe("TextbookPanel", () => {
     await flushPromises();
 
     expect(wrapper.classes()).toContain("textbook-panel--maximized");
-    expect(wrapper.get(".textbook-panel__body--preview").classes()).toContain(
-      "textbook-panel__body--preview-maximized",
-    );
+    expect(wrapper.get(".textbook-panel__body--preview").classes()).toContain("textbook-panel__body--preview-maximized");
     expect(wrapper.get(".thumbnail-strip").classes()).toContain("thumbnail-strip--vertical");
   });
 
@@ -449,5 +443,63 @@ describe("TextbookPanel", () => {
     );
     await wrapper.get("[aria-label='資料一覧']").trigger("click");
     expect(wrapper.text()).toContain("保存済み");
+  });
+
+  it("PNG・JPG・JPEGをPDF loaderへ渡さず画像としてpreviewする", async () => {
+    const pdfLoader = createPdfLoader();
+    const wrapper = mount(TextbookPanel, {
+      global: { plugins: [createPinia()] },
+      props: { noteId: "note-image", pdfLoader },
+    });
+    const input = wrapper.get("[data-testid='textbook-file']");
+    const file = new File(["image"], "graph.png", { type: "image/png" });
+    Object.defineProperty(input.element, "files", { value: [file] });
+
+    await input.trigger("change");
+    await flushPromises();
+
+    expect(pdfLoader.load).not.toHaveBeenCalled();
+    expect(wrapper.findComponent({ name: "ImageMaterialPreview" }).exists()).toBe(true);
+    expect(wrapper.get(".image-material-preview img").attributes("alt")).toBe("graph.png");
+    expect(wrapper.findComponent({ name: "PageThumbnailStrip" }).exists()).toBe(false);
+  });
+
+  it("HTTP(S)ブックマークを保存しnoopener付きの別タブリンクにする", async () => {
+    const repository: TextbookRepository = {
+      list: vi.fn().mockResolvedValue([]),
+      save: vi.fn().mockResolvedValue({ kind: "bookmark" }),
+    };
+    const wrapper = mount(TextbookPanel, {
+      global: { plugins: [createPinia()] },
+      props: { currentUser: user, noteId: "note-bookmark", repository },
+    });
+    await flushPromises();
+    const controls = wrapper.findComponent({ name: "MaterialAddControls" });
+    await controls.findAll("[role='tab']")[1].trigger("click");
+    const inputs = controls.findAll("input");
+    await inputs[0].setValue("公式ドキュメント");
+    await inputs[1].setValue("https://example.com/docs#intro");
+    await controls.get("form").trigger("submit");
+    await flushPromises();
+
+    const bookmark = wrapper.get(".textbook-list__item[href]");
+    expect(bookmark.attributes("href")).toBe("https://example.com/docs#intro");
+    expect(bookmark.attributes("target")).toBe("_blank");
+    expect(bookmark.attributes("rel")).toBe("noopener noreferrer");
+    expect(repository.save).toHaveBeenCalledWith(expect.objectContaining({ kind: "bookmark", noteId: "note-bookmark" }), user);
+  });
+
+  it("危険なschemeのブックマークを追加しない", async () => {
+    const wrapper = mount(TextbookPanel, {
+      global: { plugins: [createPinia()] },
+      props: { noteId: "note-invalid-bookmark" },
+    });
+    const controls = wrapper.findComponent({ name: "MaterialAddControls" });
+    await controls.findAll("[role='tab']")[1].trigger("click");
+    await controls.findAll("input")[1].setValue("javascript:alert(1)");
+    await controls.get("form").trigger("submit");
+
+    expect(wrapper.text()).toContain("httpまたはhttpsのURL");
+    expect(wrapper.find(".textbook-list__item[href]").exists()).toBe(false);
   });
 });

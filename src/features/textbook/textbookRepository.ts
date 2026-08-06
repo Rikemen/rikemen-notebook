@@ -1,101 +1,171 @@
+/* eslint-disable no-ternary, sonarjs/redundant-type-aliases */
 import type { AuthUser } from "@/features/auth/types";
 import { canUploadFile, SIGNED_IN_UPLOAD_LIMIT_BYTES } from "@/features/auth/accessPolicy";
+import { validateBookmark } from "@/features/textbook/bookmarkMaterial";
 import { noteMaterialDocumentPath, noteMaterialStoragePath } from "@/features/user-data/userDataPaths";
 
-export interface TextbookMetadata {
-  id: string;
-  ownerUid: string;
-  fileName: string;
-  noteId: string;
-  pageCount: number;
-  sizeBytes: number;
-  storagePath: string;
-  contentType: string;
+interface MaterialMetadataBase {
   createdAt: string;
-}
-
-export interface TextbookUploadInput {
   id: string;
-  fileName: string;
   noteId: string;
-  pageCount: number;
+  ownerUid: string;
+}
+
+interface FileMaterialMetadataBase extends MaterialMetadataBase {
+  fileName: string;
   sizeBytes: number;
-  contentType: string;
-}
-
-export interface TextbookSaveTarget {
-  metadataPath: string;
   storagePath: string;
-  metadata: TextbookMetadata;
 }
 
-export interface TextbookSaveInput {
+export interface PdfMaterialMetadata extends FileMaterialMetadataBase {
+  contentType: "application/pdf";
+  kind: "pdf";
+  pageCount: number;
+}
+
+export interface ImageMaterialMetadata extends FileMaterialMetadataBase {
+  contentType: "image/jpeg" | "image/png";
+  kind: "image";
+}
+
+export type FileMaterialMetadata = ImageMaterialMetadata | PdfMaterialMetadata;
+
+export interface BookmarkMaterialMetadata extends MaterialMetadataBase {
+  kind: "bookmark";
+  title: string;
+  url: string;
+}
+
+export type TextbookMetadata = BookmarkMaterialMetadata | FileMaterialMetadata;
+
+export type SavedMaterial =
+  | BookmarkMaterialMetadata
+  | (FileMaterialMetadata & {
+      sourceUrl: string;
+    });
+export type SavedTextbook = SavedMaterial;
+
+export interface MaterialFileSaveInput {
   file: File;
   id: string;
+  kind?: "image" | "pdf";
   noteId: string;
-  pageCount: number;
+  pageCount?: number;
 }
 
-export interface SavedTextbook extends TextbookMetadata {
-  sourceUrl: string;
+export interface MaterialBookmarkSaveInput {
+  id: string;
+  kind: "bookmark";
+  noteId: string;
+  title: string;
+  url: string;
+}
+
+export type TextbookSaveInput = MaterialBookmarkSaveInput | MaterialFileSaveInput;
+
+export interface TextbookSaveTarget {
+  metadata: FileMaterialMetadata;
+  metadataPath: string;
+  storagePath: string;
 }
 
 export interface TextbookRepository {
-  list(uid: string, noteId: string): Promise<SavedTextbook[]>;
+  list(uid: string, noteId: string): Promise<SavedMaterial[]>;
   save(input: TextbookSaveInput, user: AuthUser | null | undefined): Promise<TextbookMetadata>;
 }
 
 const requireUser = (user: AuthUser | null | undefined): AuthUser => {
-  if (!user) {
-    throw new Error("login is required to save textbook history");
-  }
+  if (!user) throw new Error("login is required to save textbook history");
   return user;
 };
 
-const validateTextbookUpload = (input: TextbookUploadInput, user: AuthUser) => {
+const fileKind = (input: MaterialFileSaveInput): "image" | "pdf" => input.kind ?? "pdf";
+
+const validateMaterialUploadMetadata = (
+  input: {
+    contentType: string;
+    kind: "image" | "pdf";
+    noteId: string;
+    pageCount?: number;
+    sizeBytes: number;
+  },
+  user: AuthUser,
+) => {
   if (!canUploadFile(input.sizeBytes, user) || input.sizeBytes > SIGNED_IN_UPLOAD_LIMIT_BYTES) {
     throw new Error("textbook file is too large");
   }
-  if (input.contentType !== "application/pdf") {
-    throw new Error("textbook must be a PDF");
-  }
-  if (!input.noteId.trim()) {
-    throw new Error("note id is required");
-  }
-  if (!Number.isInteger(input.pageCount) || input.pageCount < 1) {
+  const allowed = input.kind === "pdf" ? input.contentType === "application/pdf" : input.contentType === "image/png" || input.contentType === "image/jpeg";
+  if (!allowed) throw new Error("material content type is invalid");
+  if (!input.noteId.trim()) throw new Error("note id is required");
+  if (input.kind === "pdf" && (!Number.isInteger(input.pageCount) || (input.pageCount ?? 0) < 1)) {
     throw new Error("textbook page count is invalid");
   }
 };
 
-export const createTextbookSaveTarget = (input: TextbookUploadInput, user: AuthUser | null | undefined): TextbookSaveTarget => {
+export const createTextbookSaveTarget = (
+  input: {
+    contentType: string;
+    fileName: string;
+    id: string;
+    kind?: "image" | "pdf";
+    noteId: string;
+    pageCount?: number;
+    sizeBytes: number;
+  },
+  user: AuthUser | null | undefined,
+): TextbookSaveTarget => {
   const owner = requireUser(user);
-  validateTextbookUpload(input, owner);
-
+  const kind = input.kind ?? "pdf";
+  validateMaterialUploadMetadata(
+    {
+      contentType: input.contentType,
+      kind,
+      noteId: input.noteId,
+      pageCount: input.pageCount,
+      sizeBytes: input.sizeBytes,
+    },
+    owner,
+  );
   const storagePath = noteMaterialStoragePath({
     fileName: input.fileName,
     materialId: input.id,
     noteId: input.noteId,
     uid: owner.uid,
   });
-
   return {
     metadata: {
       contentType: input.contentType,
       createdAt: new Date().toISOString(),
       fileName: input.fileName,
       id: input.id,
+      kind,
       noteId: input.noteId,
       ownerUid: owner.uid,
-      pageCount: input.pageCount,
+      ...(kind === "pdf" ? { pageCount: input.pageCount } : {}),
       sizeBytes: input.sizeBytes,
       storagePath,
-    },
-    metadataPath: noteMaterialDocumentPath({
-      childId: input.id,
-      noteId: input.noteId,
-      uid: owner.uid,
-    }),
+    } as FileMaterialMetadata,
+    metadataPath: noteMaterialDocumentPath({ childId: input.id, noteId: input.noteId, uid: owner.uid }),
     storagePath,
+  };
+};
+
+export const createBookmarkSaveTarget = (input: MaterialBookmarkSaveInput, user: AuthUser | null | undefined) => {
+  const owner = requireUser(user);
+  if (!input.noteId.trim()) throw new Error("note id is required");
+  const validation = validateBookmark(input.title, input.url);
+  if (!validation.ok) throw new Error(validation.message);
+  return {
+    metadata: {
+      createdAt: new Date().toISOString(),
+      id: input.id,
+      kind: "bookmark" as const,
+      noteId: input.noteId,
+      ownerUid: owner.uid,
+      title: validation.title,
+      url: validation.url,
+    },
+    metadataPath: noteMaterialDocumentPath({ childId: input.id, noteId: input.noteId, uid: owner.uid }),
   };
 };
 
@@ -103,26 +173,32 @@ export class InMemoryTextbookRepository implements TextbookRepository {
   private readonly metadata = new Map<string, TextbookMetadata>();
 
   save(input: TextbookSaveInput, user: AuthUser | null | undefined) {
-    const target = createTextbookSaveTarget({
-      contentType: input.file.type,
-      fileName: input.file.name,
-      id: input.id,
-      noteId: input.noteId,
-      pageCount: input.pageCount,
-      sizeBytes: input.file.size,
-    }, user);
+    if (input.kind === "bookmark") {
+      const target = createBookmarkSaveTarget(input, user);
+      this.metadata.set(target.metadataPath, target.metadata);
+      return Promise.resolve(target.metadata);
+    }
+    const target = createTextbookSaveTarget(
+      {
+        contentType: input.file.type,
+        fileName: input.file.name,
+        id: input.id,
+        kind: fileKind(input),
+        noteId: input.noteId,
+        pageCount: input.pageCount,
+        sizeBytes: input.file.size,
+      },
+      user,
+    );
     this.metadata.set(target.metadataPath, target.metadata);
     return Promise.resolve(target.metadata);
   }
 
-  list(uid: string, noteId: string) {
+  list(uid: string, noteId: string): Promise<SavedMaterial[]> {
     return Promise.resolve(
       [...this.metadata.values()]
-        .filter((textbook) => textbook.ownerUid === uid && textbook.noteId === noteId)
-        .map((textbook) => ({
-          ...textbook,
-          sourceUrl: textbook.storagePath,
-        })),
+        .filter((material) => material.ownerUid === uid && material.noteId === noteId)
+        .map((material) => (material.kind === "bookmark" ? material : { ...material, sourceUrl: material.storagePath })),
     );
   }
 }
