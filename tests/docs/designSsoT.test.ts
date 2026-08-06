@@ -22,10 +22,16 @@ describe("designSsoT", () => {
     expect(design).toContain("2パネル");
   });
 
-  it("別タブ表示を使わず最大化中はパネル領域を優先する", () => {
-    expect(design).not.toContain("別タブで開く");
+  it("ブックマークは別タブで開き、最大化中はパネル領域を優先する", () => {
+    expect(design).toContain("別タブで開く");
     expect(design).toContain("最大化中はアプリ共通ヘッダー");
     expect(design).toContain("ワークスペース表示モードを非表示");
+  });
+
+  it("ホワイトボードの見出し階層と30秒自動保存を定義する", () => {
+    expect(design).toContain("`###`を+2pt、`##`を+4pt、`#`を+6pt");
+    expect(design).toContain("最後の編集から30秒後");
+    expect(design).toContain("未保存のままブラウザページを閉じる場合はnative警告");
   });
 
   it("資料パネルの3モードと手書き画像ダイアログを定義する", () => {
