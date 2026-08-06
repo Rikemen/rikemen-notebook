@@ -1,29 +1,39 @@
 <template>
   <section aria-label="アップロード済みの資料" class="textbook-list">
-    <p v-if="textbooks.length === 0" class="textbook-list__empty">PDFを追加してください。</p>
-    <button
-      v-for="textbook in textbooks"
-      :key="textbook.id"
-      class="textbook-list__item"
-      :class="{ 'textbook-list__item--selected': textbook.id === selectedId }"
-      type="button"
-      @click="$emit('select', textbook.id)"
-    >
-      <span class="textbook-list__icon">PDF</span>
-      <span>
-        <strong>{{ textbook.title }}</strong>
-        <small>{{ textbook.sizeLabel }}・{{ textbook.uploadedAt }}</small>
-        <small v-if="materialStatusLabel(textbook.status)" class="textbook-list__status">
-          {{ materialStatusLabel(textbook.status) }}
-        </small>
-      </span>
-    </button>
+    <p v-if="textbooks.length === 0" class="textbook-list__empty">PDFを追加してください。画像・ブックマークにも対応しています。</p>
+    <template v-for="textbook in textbooks" :key="textbook.id">
+      <a v-if="textbook.kind === 'bookmark'" class="textbook-list__item" :href="textbook.url" rel="noopener noreferrer" target="_blank">
+        <span class="textbook-list__icon textbook-list__icon--bookmark">URL</span>
+        <span>
+          <strong>{{ textbook.title }}</strong>
+          <small>{{ textbook.url }}</small>
+          <small v-if="materialStatusLabel(textbook.status)" class="textbook-list__status">{{ materialStatusLabel(textbook.status) }}</small>
+        </span>
+      </a>
+      <button
+        v-else
+        :key="textbook.id"
+        class="textbook-list__item"
+        :class="{ 'textbook-list__item--selected': textbook.id === selectedId }"
+        type="button"
+        @click="$emit('select', textbook.id)"
+      >
+        <span class="textbook-list__icon" :class="{ 'textbook-list__icon--image': textbook.kind === 'image' }">{{ materialKindLabel(textbook.kind) }}</span>
+        <span>
+          <strong>{{ textbook.title }}</strong>
+          <small>{{ textbook.sizeLabel }}・{{ textbook.uploadedAt }}</small>
+          <small v-if="materialStatusLabel(textbook.status)" class="textbook-list__status">
+            {{ materialStatusLabel(textbook.status) }}
+          </small>
+        </span>
+      </button>
+    </template>
   </section>
 </template>
 
 <script lang="ts">
 import { defineComponent, type PropType } from "vue";
-import { materialStatusLabel, type MaterialListItem } from "@/features/textbook/materials";
+import { materialKindLabel, materialStatusLabel, type MaterialListItem } from "@/features/textbook/materials";
 
 export default defineComponent({
   name: "TextbookList",
@@ -41,6 +51,7 @@ export default defineComponent({
   setup() {
     return {
       materialStatusLabel,
+      materialKindLabel,
     };
   },
 });
@@ -76,6 +87,12 @@ export default defineComponent({
   background: var(--color-panel);
   color: var(--color-text);
   text-align: left;
+  text-decoration: none;
+}
+
+.textbook-list__icon--bookmark,
+.textbook-list__icon--image {
+  background: var(--color-blue);
 }
 
 .textbook-list__item--selected {

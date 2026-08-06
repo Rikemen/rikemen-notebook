@@ -43,7 +43,12 @@ describe("HandwritingCanvas", () => {
     };
     vm.startStroke({ clientX: 1, clientY: 1 });
     vm.continueStroke({ clientX: 2, clientY: 2 });
+    expect(wrapper.emitted("draft-change")).toBeUndefined();
     vm.finishStroke();
+    expect(wrapper.emitted("draft-change")?.[0]?.[0]).toMatchObject({
+      dataUrl: "data:image/png;base64,test",
+      strokes: [{ points: expect.any(Array) }],
+    });
     await wrapper.get(".handwriting-canvas__save").trigger("click");
 
     expect(wrapper.emitted("save")?.[0]?.[0]).toMatchObject({

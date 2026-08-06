@@ -4,7 +4,7 @@
       <h2>手書きホワイトボード</h2>
       <div class="handwriting-canvas__actions">
         <button type="button" @click="clear">クリア</button>
-        <button type="button" @click="$emit('close')">キャンセル</button>
+        <button type="button" @click="$emit('close')">閉じる</button>
         <button class="handwriting-canvas__save" type="button" @click="save">保存</button>
       </div>
     </header>
@@ -28,7 +28,9 @@ import { defineComponent, onMounted, ref, type PropType } from "vue";
 import { resolveCanvasPoint } from "@/features/whiteboard/handwritingCanvas";
 import type { WhiteboardDrawing, WhiteboardStroke } from "@/features/whiteboard/whiteboardDrawings";
 
-const blankDataUrl = "data:image/png;base64,";
+const PNG_CONTENT_TYPE = "image/png";
+const DRAFT_CHANGE_EVENT = "draft-change";
+const blankDataUrl = `data:${PNG_CONTENT_TYPE};base64,`;
 
 const getContext = (canvas: HTMLCanvasElement | null) => {
   if (import.meta.env.MODE === "test") {
@@ -46,7 +48,7 @@ export default defineComponent({
       type: Object as PropType<WhiteboardDrawing | null>,
     },
   },
-  emits: ["close", "save"],
+  emits: ["close", DRAFT_CHANGE_EVENT, "save"],
   setup(props, { emit }) {
     const canvasRef = ref<HTMLCanvasElement | null>(null);
     const strokes = ref<WhiteboardStroke[]>(props.drawing?.strokes ?? []);
@@ -105,25 +107,31 @@ export default defineComponent({
       activeStroke.value.points.push(resolveCanvasPoint(event, canvasRef.value));
       drawLine(activeStroke.value);
     };
+    const createSnapshot = () => {
+      try {
+        return {
+          dataUrl: canvasRef.value?.toDataURL(PNG_CONTENT_TYPE) ?? blankDataUrl,
+          strokes: strokes.value,
+        };
+      } catch {
+        return {
+          dataUrl: props.drawing?.dataUrl ?? blankDataUrl,
+          strokes: strokes.value,
+        };
+      }
+    };
     const finishStroke = () => {
+      if (!activeStroke.value) return;
       activeStroke.value = null;
+      emit(DRAFT_CHANGE_EVENT, createSnapshot());
     };
     const clear = () => {
       strokes.value = [];
       redraw();
+      emit(DRAFT_CHANGE_EVENT, createSnapshot());
     };
     const save = () => {
-      try {
-        emit("save", {
-          dataUrl: canvasRef.value?.toDataURL("image/png") ?? blankDataUrl,
-          strokes: strokes.value,
-        });
-      } catch {
-        emit("save", {
-          dataUrl: props.drawing?.dataUrl ?? blankDataUrl,
-          strokes: strokes.value,
-        });
-      }
+      emit("save", createSnapshot());
     };
 
     return {

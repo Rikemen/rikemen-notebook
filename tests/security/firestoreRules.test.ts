@@ -57,4 +57,23 @@ describe("firestoreRules", () => {
     expect(rules).toContain("function noteExists(userId, noteId)");
     expect(rules).toContain("noteExists(userId, noteId)");
   });
+
+  it("画像・ブックマークを種別別の厳格schemaで検証する", () => {
+    expect(rules).toContain('data.kind in ["pdf", "image"]');
+    expect(rules).toContain('data.contentType in ["image/jpeg", "image/png"]');
+    expect(rules).toContain("hasValidBookmarkMaterial(userId, noteId)");
+    expect(rules).toContain('data.kind == "bookmark"');
+    expect(rules).toContain("data.url.size() <= 2048");
+    expect(rules).toContain('data.url.matches("^https?://');
+  });
+
+  it("ホワイトボードpageとdrawingを所有者・親note・サイズで検証する", () => {
+    expect(rules).toContain("hasValidWhiteboardPage(userId, noteId)");
+    expect(rules).toContain("data.markdown.size() <= 200000");
+    expect(rules).toContain("hasValidWhiteboardDrawing(userId, noteId, drawingId)");
+    expect(rules).toContain("/whiteboardDrawings/{drawingId}");
+    expect(rules).toContain("noteExists(userId, noteId)");
+    expect(rules).toContain("hasUnchangedWhiteboardPageIdentity()");
+    expect(rules).toContain("hasUnchangedWhiteboardDrawingIdentity()");
+  });
 });

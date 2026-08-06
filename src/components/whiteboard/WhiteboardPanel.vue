@@ -58,7 +58,13 @@
       @delete="deleteSelectedDrawing"
       @edit="editSelectedDrawing"
     />
-    <HandwritingCanvas v-if="isHandwritingOpen" :drawing="editingDrawing" @close="closeHandwriting" @save="saveHandwriting" />
+    <HandwritingCanvas
+      v-if="isHandwritingOpen"
+      :drawing="editingDrawing"
+      @close="closeHandwriting"
+      @draft-change="checkpointHandwriting"
+      @save="saveHandwriting"
+    />
   </div>
 </template>
 
@@ -164,7 +170,7 @@ export default defineComponent({
       store.deleteDrawing(props.noteId, selectedDrawingId.value);
       closeDrawingDialog();
     };
-    const saveHandwriting = (payload: { dataUrl: string; strokes: WhiteboardStroke[] }) => {
+    const persistHandwriting = (payload: { dataUrl: string; strokes: WhiteboardStroke[] }) => {
       const nowIso = new Date().toISOString();
       const targetDrawingId = editingDrawingId.value || createDrawingId();
       const existingDrawing = drawings.value.find((drawing) => drawing.id === targetDrawingId);
@@ -179,14 +185,22 @@ export default defineComponent({
         createdAt: existingDrawing?.createdAt ?? drawing.createdAt,
       });
       if (!existingDrawing) {
+        editingDrawingId.value = targetDrawingId;
         currentMarkdown.value = [currentMarkdown.value.trimEnd(), createDrawingMarkdown(targetDrawingId)].filter(Boolean).join("\n\n");
       }
+    };
+    const checkpointHandwriting = (payload: { dataUrl: string; strokes: WhiteboardStroke[] }) => {
+      persistHandwriting(payload);
+    };
+    const saveHandwriting = (payload: { dataUrl: string; strokes: WhiteboardStroke[] }) => {
+      persistHandwriting(payload);
       viewMode.value = "preview";
       closeHandwriting();
     };
 
     return {
       addPage,
+      checkpointHandwriting,
       closeHandwriting,
       closeDrawingDialog,
       currentMarkdown,

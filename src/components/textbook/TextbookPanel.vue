@@ -4,27 +4,7 @@
 
     <section v-if="mode === 'materials'" class="textbook-panel__body textbook-panel__body--materials">
       <p class="textbook-panel__description">{{ description }}</p>
-      <div class="textbook-panel__actions">
-        <label class="textbook-panel__upload">
-          PDFをアップロード
-          <input
-            ref="fileInput"
-            class="sr-only"
-            data-testid="textbook-file"
-            type="file"
-            accept="application/pdf"
-            @change="handleFileChange"
-          />
-        </label>
-        <button
-          class="textbook-panel__select"
-          data-testid="textbook-file-trigger"
-          type="button"
-          @click="openFilePicker"
-        >
-          ファイルを選択
-        </button>
-      </div>
+      <MaterialAddControls @add-bookmark="addBookmark" @select-file="handleFileChange" />
       <p class="textbook-panel__limit">上限: {{ limitLabel }}</p>
       <p v-if="errorMessage" class="textbook-panel__error">{{ errorMessage }}</p>
       <p v-if="loadError" class="textbook-panel__error">{{ loadError }}</p>
@@ -53,7 +33,9 @@
         'textbook-panel__body--thumbnails-collapsed': thumbnailsCollapsed,
       }"
     >
+      <ImageMaterialPreview v-if="selectedMaterial?.kind === 'image'" :source-url="selectedMaterial.sourceUrl" :title="selectedTextbookTitle" />
       <TextbookPreview
+        v-else
         :page="selectedPage"
         :pdf-document="selectedPdfDocument"
         :source-url="selectedMaterial?.sourceUrl"
@@ -61,6 +43,7 @@
         :zoom-enabled="isMaximized"
       />
       <PageThumbnailStrip
+        v-if="selectedMaterial?.kind !== 'image'"
         :collapsed="thumbnailsCollapsed"
         :orientation="thumbnailOrientation"
         :pages="pages"
@@ -74,15 +57,17 @@
 </template>
 
 <script lang="ts">
-/* eslint-disable max-lines, max-lines-per-function, max-statements */
+/* eslint-disable max-lines, max-lines-per-function, max-statements, no-ternary, prefer-destructuring */
 import { computed, defineComponent, ref, watch, type PropType } from "vue";
 import type { AuthUser } from "@/features/auth/types";
 import { canPersistHistory, getUploadLimitBytes } from "@/features/auth/accessPolicy";
 import {
+  createMaterialFromBookmark,
   createMaterialFromFile,
   createMaterialFromSavedTextbook,
   materialUploadStatus,
-  validatePdfFile,
+  validateBookmark,
+  validateMaterialFile,
 } from "@/features/textbook/materials";
 import type { MaterialTocItem } from "@/features/textbook/materialTableOfContents";
 import { type MaterialPanelMode, useTextbookPanelStore } from "@/features/textbook/textbookPanelStore";
@@ -91,7 +76,9 @@ import { pdfJsDocumentLoader, type PdfDocumentLoader } from "@/features/textbook
 import { usePdfDocument } from "@/features/textbook/usePdfDocument";
 import { createDefaultTextbookRepository } from "@/features/textbook/textbookRepositoryProvider";
 import MaterialModeSwitcher from "@/components/textbook/MaterialModeSwitcher.vue";
+import MaterialAddControls from "@/components/textbook/MaterialAddControls.vue";
 import MaterialTableOfContents from "@/components/textbook/MaterialTableOfContents.vue";
+import ImageMaterialPreview from "@/components/textbook/ImageMaterialPreview.vue";
 import PageThumbnailStrip from "@/components/textbook/PageThumbnailStrip.vue";
 import TextbookList from "@/components/textbook/TextbookList.vue";
 import TextbookPreview from "@/components/textbook/TextbookPreview.vue";
@@ -109,6 +96,8 @@ const defaultRepository = createDefaultTextbookRepository();
 export default defineComponent({
   name: "TextbookPanel",
   components: {
+    ImageMaterialPreview,
+    MaterialAddControls,
     MaterialModeSwitcher,
     MaterialTableOfContents,
     PageThumbnailStrip,
@@ -142,7 +131,6 @@ export default defineComponent({
     const store = useTextbookPanelStore();
     const panelState = computed(() => store.stateForNote(props.noteId));
     const errorMessage = ref("");
-    const fileInput = ref<HTMLInputElement | null>(null);
     const isLoading = ref(false);
     const loadError = ref("");
     const materials = computed(() => panelState.value.materials);
@@ -156,18 +144,12 @@ export default defineComponent({
       }
       return "horizontal";
     });
-    const selectedMaterial = computed(() =>
-      materials.value.find((material) => material.id === selectedTextbookId.value),
-    );
+    const selectedMaterial = computed(() => materials.value.find((material) => material.id === selectedTextbookId.value));
     const uploadLimitBytes = computed(() => getUploadLimitBytes(props.currentUser));
     const limitLabel = computed(() => formatBytes(uploadLimitBytes.value));
-    const pages = computed(() =>
-      Array.from({ length: selectedMaterial.value?.pageCount ?? 1 }, (_value, index) => index + 1),
-    );
+    const pages = computed(() => Array.from({ length: selectedMaterial.value?.pageCount ?? 1 }, (_value, index) => index + 1));
     const selectedTextbookTitle = computed(() => selectedMaterial.value?.title ?? "資料が選択されていません");
-    const selectedTableOfContents = computed(
-      () => panelState.value.tocByMaterialId[selectedTextbookId.value] ?? [],
-    );
+    const selectedTableOfContents = computed(() => panelState.value.tocByMaterialId[selectedTextbookId.value] ?? []);
     const description = computed(() => {
       if (canPersistHistory(props.currentUser)) {
         return "アップロードした教材は自分の教材履歴に保存されます。";
@@ -178,6 +160,12 @@ export default defineComponent({
     const disabledModes = computed<MaterialPanelMode[]>(() => {
       if (materials.value.length === 0) {
         return ["contents", "preview"];
+      }
+      if (selectedMaterial.value?.kind === "bookmark") {
+        return ["contents", "preview"];
+      }
+      if (selectedMaterial.value?.kind === "image") {
+        return ["contents"];
       }
       return [];
     });
@@ -223,7 +211,7 @@ export default defineComponent({
     watch(
       () => [selectedMaterial.value?.id ?? "", selectedMaterial.value?.sourceUrl ?? ""] as const,
       async ([materialId, sourceUrl]) => {
-        if (!sourceUrl || sourceUrl === pdfDocumentSource.value) {
+        if (selectedMaterial.value?.kind === "image" || !sourceUrl || sourceUrl === pdfDocumentSource.value) {
           return;
         }
 
@@ -239,38 +227,35 @@ export default defineComponent({
       { immediate: true },
     );
 
-    const handleFileChange = async (event: Event) => {
-      const { files } = event.target as HTMLInputElement;
-      const [file] = files ?? [];
-      if (!file) {
-        return;
-      }
-
-      const validation = validatePdfFile(file, uploadLimitBytes.value);
+    const handleFileChange = async (file: File) => {
+      const validation = validateMaterialFile(file, uploadLimitBytes.value);
       if (!validation.ok) {
         if (validation.message === "file-too-large") {
-          errorMessage.value = `${limitLabel.value}以下のPDFを選択してください。`;
+          errorMessage.value =
+            file.type === "application/pdf" ? `${limitLabel.value}以下のPDFを選択してください。` : `${limitLabel.value}以下の画像を選択してください。`;
         } else {
           errorMessage.value = validation.message;
         }
-        (event.target as HTMLInputElement).value = "";
         return;
       }
 
       errorMessage.value = "";
       const materialId = createId();
       const sourceUrl = URL.createObjectURL(file);
-      const document = await loadPdfDocument(sourceUrl);
-      if (!document) {
-        URL.revokeObjectURL(sourceUrl);
-        errorMessage.value = "PDFを読み込めませんでした。別のPDFを選択してください。";
-        (event.target as HTMLInputElement).value = "";
-        return;
+      let pageCount = 1;
+      if (validation.kind === "pdf") {
+        const document = await loadPdfDocument(sourceUrl);
+        if (!document) {
+          URL.revokeObjectURL(sourceUrl);
+          errorMessage.value = "PDFを読み込めませんでした。別のPDFを選択してください。";
+          return;
+        }
+        pageCount = document.pageCount;
       }
-      const { pageCount } = document;
       store.addMaterial(
         props.noteId,
         createMaterialFromFile(file, materialId, {
+          kind: validation.kind,
           pageCount,
           sourceUrl,
           status: materialUploadStatus(props.currentUser),
@@ -285,6 +270,7 @@ export default defineComponent({
             {
               file,
               id: materialId,
+              kind: validation.kind,
               noteId: props.noteId,
               pageCount,
             },
@@ -292,15 +278,50 @@ export default defineComponent({
           );
           store.updateMaterial(props.noteId, materialId, {
             status: "saved",
-            storagePath: metadata.storagePath,
+            storagePath: metadata.kind === "bookmark" ? undefined : metadata.storagePath,
           });
         } catch {
           store.updateMaterial(props.noteId, materialId, { status: "error" });
-          errorMessage.value = "PDFの保存に失敗しました。プレビューはこの画面で一時利用できます。";
+          errorMessage.value = "資料の保存に失敗しました。プレビューはこの画面で一時利用できます。";
         }
       }
     };
-    const openFilePicker = () => fileInput.value?.click();
+    const addBookmark = async (input: { title: string; url: string }) => {
+      const validation = validateBookmark(input.title, input.url);
+      if (!validation.ok) {
+        errorMessage.value = validation.message;
+        return;
+      }
+      errorMessage.value = "";
+      const materialId = createId();
+      store.addMaterial(
+        props.noteId,
+        createMaterialFromBookmark({
+          id: materialId,
+          status: materialUploadStatus(props.currentUser),
+          title: validation.title,
+          url: validation.url,
+        }),
+      );
+      store.setMode(props.noteId, "materials");
+      if (!props.currentUser) return;
+      try {
+        await repository.value.save(
+          {
+            id: materialId,
+            kind: "bookmark",
+            noteId: props.noteId,
+            title: validation.title,
+            url: validation.url,
+          },
+          props.currentUser,
+        );
+        store.updateMaterial(props.noteId, materialId, { status: "saved" });
+      } catch {
+        store.updateMaterial(props.noteId, materialId, { status: "error" });
+        errorMessage.value = "ブックマークの保存に失敗しました。この画面では一時利用できます。";
+      }
+    };
     const selectTextbook = (textbookId: string) => {
       store.selectTextbook(props.noteId, textbookId);
     };
@@ -329,11 +350,11 @@ export default defineComponent({
     };
 
     return {
+      addBookmark,
       addTocItem,
       description,
       disabledModes,
       errorMessage,
-      fileInput,
       handleFileChange,
       isLoading,
       limitLabel,
@@ -341,7 +362,6 @@ export default defineComponent({
       materials,
       mode,
       openTocItem,
-      openFilePicker,
       pages,
       pdfDocument,
       selectPage,

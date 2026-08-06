@@ -60,11 +60,9 @@ describe("FirebaseTextbookRepository", () => {
       user,
     );
 
-    expect(firebaseMocks.uploadBytes).toHaveBeenCalledWith(
-      { path: "users/user-1/notes/note-1/materials/material-1/textbook.pdf" },
-      file,
-      { contentType: "application/pdf" },
-    );
+    expect(firebaseMocks.uploadBytes).toHaveBeenCalledWith({ path: "users/user-1/notes/note-1/materials/material-1/textbook.pdf" }, file, {
+      contentType: "application/pdf",
+    });
     expect(firebaseMocks.setDoc.mock.calls[0]?.[0]).toEqual({
       path: "users/user-1/notes/note-1/materials/material-1",
     });
@@ -132,5 +130,31 @@ describe("FirebaseTextbookRepository", () => {
         sourceUrl: "https://storage.example/textbook.pdf",
       }),
     ]);
+  });
+
+  it("画像はStorageへ保存し、ブックマークはFirestoreだけへ保存する", async () => {
+    const repository = new FirebaseTextbookRepository({} as never, {} as never);
+    const image = new File(["image"], "graph.png", { type: "image/png" });
+    await repository.save({ file: image, id: "image-1", kind: "image", noteId: "note-1" }, user);
+    expect(firebaseMocks.uploadBytes).toHaveBeenCalledWith({ path: "users/user-1/notes/note-1/materials/image-1/graph.png" }, image, {
+      contentType: "image/png",
+    });
+
+    firebaseMocks.uploadBytes.mockClear();
+    await repository.save(
+      {
+        id: "bookmark-1",
+        kind: "bookmark",
+        noteId: "note-1",
+        title: "Example",
+        url: "https://example.com/",
+      },
+      user,
+    );
+    expect(firebaseMocks.uploadBytes).not.toHaveBeenCalled();
+    expect(firebaseMocks.setDoc).toHaveBeenLastCalledWith(
+      { path: "users/user-1/notes/note-1/materials/bookmark-1" },
+      expect.objectContaining({ kind: "bookmark", url: "https://example.com/" }),
+    );
   });
 });

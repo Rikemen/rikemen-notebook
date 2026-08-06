@@ -1,15 +1,13 @@
+/* eslint-disable max-statements, no-ternary, prefer-destructuring */
 import { collection, doc, getDocs, setDoc, type Firestore } from "firebase/firestore";
-import {
-  deleteObject,
-  getDownloadURL,
-  ref as storageReference,
-  uploadBytes,
-  type FirebaseStorage,
-} from "firebase/storage";
+import { deleteObject, getDownloadURL, ref as storageReference, uploadBytes, type FirebaseStorage } from "firebase/storage";
 import type { AuthUser } from "@/features/auth/types";
 import {
+  createBookmarkSaveTarget,
   createTextbookSaveTarget,
-  type SavedTextbook,
+  type BookmarkMaterialMetadata,
+  type FileMaterialMetadata,
+  type SavedMaterial,
   type TextbookMetadata,
   type TextbookRepository,
   type TextbookSaveInput,
@@ -18,60 +16,95 @@ import { noteMaterialsCollectionPath } from "@/features/user-data/userDataPaths"
 import { db, storage } from "@/utils/firebase";
 
 const isString = (value: unknown): value is string => typeof value === "string";
+const isPositiveInteger = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value) && value > 0;
 const PDF_CONTENT_TYPE = "application/pdf";
 
 interface MetadataReadContext {
-  id: string,
-  value: Record<string, unknown>,
-  uid: string,
-  noteId: string,
+  id: string;
+  noteId: string;
+  uid: string;
+  value: Record<string, unknown>;
 }
 
-const parseTextbookMetadata = ({
-  id,
-  noteId,
-  uid,
-  value,
-}: MetadataReadContext): TextbookMetadata | null => {
+const parseBookmark = ({ id, noteId, uid, value }: MetadataReadContext): BookmarkMaterialMetadata | null => {
   if (
+    value.kind !== "bookmark" ||
     value.ownerUid !== uid ||
     value.noteId !== noteId ||
-    value.contentType !== PDF_CONTENT_TYPE ||
+    !isString(value.createdAt) ||
+    !isString(value.title) ||
+    !isString(value.url)
+  )
+    return null;
+  return { createdAt: value.createdAt, id, kind: "bookmark", noteId, ownerUid: uid, title: value.title, url: value.url };
+};
+
+const parseFile = ({ id, noteId, uid, value }: MetadataReadContext): FileMaterialMetadata | null => {
+  const contentType = value.contentType;
+  const inferredKind = value.kind ?? (contentType === PDF_CONTENT_TYPE ? "pdf" : undefined);
+  const validContentType = contentType === PDF_CONTENT_TYPE || contentType === "image/jpeg" || contentType === "image/png";
+  if (
+    (inferredKind !== "pdf" && inferredKind !== "image") ||
+    !validContentType ||
+    value.ownerUid !== uid ||
+    value.noteId !== noteId ||
     !isString(value.createdAt) ||
     !isString(value.fileName) ||
     !isString(value.storagePath) ||
-    typeof value.pageCount !== "number" ||
-    !Number.isInteger(value.pageCount) ||
-    value.pageCount < 1 ||
-    typeof value.sizeBytes !== "number" ||
-    value.sizeBytes < 1
-  ) {
+    !isPositiveInteger(value.sizeBytes) ||
+    (inferredKind === "pdf" && !isPositiveInteger(value.pageCount))
+  )
     return null;
-  }
-
-  return {
-    contentType: PDF_CONTENT_TYPE,
+  const common = {
     createdAt: value.createdAt,
     fileName: value.fileName,
     id,
     noteId,
     ownerUid: uid,
-    pageCount: value.pageCount,
     sizeBytes: value.sizeBytes,
     storagePath: value.storagePath,
   };
+  if (inferredKind === "pdf") {
+    return {
+      ...common,
+      contentType: PDF_CONTENT_TYPE,
+      kind: "pdf",
+      pageCount: value.pageCount as number,
+    };
+  }
+  return {
+    ...common,
+    contentType: contentType as "image/jpeg" | "image/png",
+    kind: "image",
+  };
 };
 
-const createMetadataPayload = (metadata: TextbookMetadata) => ({
-  contentType: metadata.contentType,
-  createdAt: metadata.createdAt,
-  fileName: metadata.fileName,
-  noteId: metadata.noteId,
-  ownerUid: metadata.ownerUid,
-  pageCount: metadata.pageCount,
-  sizeBytes: metadata.sizeBytes,
-  storagePath: metadata.storagePath,
-});
+const parseMaterialMetadata = (context: MetadataReadContext): TextbookMetadata | null =>
+  context.value.kind === "bookmark" ? parseBookmark(context) : parseFile(context);
+
+const createMetadataPayload = (metadata: TextbookMetadata) => {
+  if (metadata.kind === "bookmark") {
+    return {
+      createdAt: metadata.createdAt,
+      kind: metadata.kind,
+      noteId: metadata.noteId,
+      ownerUid: metadata.ownerUid,
+      title: metadata.title,
+      url: metadata.url,
+    };
+  }
+  return {
+    contentType: metadata.contentType,
+    createdAt: metadata.createdAt,
+    fileName: metadata.fileName,
+    kind: metadata.kind,
+    noteId: metadata.noteId,
+    ownerUid: metadata.ownerUid,
+    ...(metadata.kind === "pdf" ? { pageCount: metadata.pageCount } : {}),
+    sizeBytes: metadata.sizeBytes,
+    storagePath: metadata.storagePath,
+  };
+};
 
 export class FirebaseTextbookRepository implements TextbookRepository {
   constructor(
@@ -79,32 +112,35 @@ export class FirebaseTextbookRepository implements TextbookRepository {
     private readonly fileStorage: FirebaseStorage = storage,
   ) {}
 
-  async list(uid: string, noteId: string): Promise<SavedTextbook[]> {
+  async list(uid: string, noteId: string): Promise<SavedMaterial[]> {
     const snapshot = await getDocs(collection(this.firestore, noteMaterialsCollectionPath({ noteId, uid })));
     const metadata = snapshot.docs
-      .map((documentSnapshot) => parseTextbookMetadata({
-        id: documentSnapshot.id,
-        noteId,
-        uid,
-        value: documentSnapshot.data(),
-      }))
-      .filter((item): item is TextbookMetadata => item !== null)
-      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
-
+      .map((item) => parseMaterialMetadata({ id: item.id, noteId, uid, value: item.data() }))
+      .filter((item): item is TextbookMetadata => item !== null);
     return await Promise.all(
-      metadata.map(async (item) => ({
-        ...item,
-        sourceUrl: await getDownloadURL(storageReference(this.fileStorage, item.storagePath)),
-      })),
+      metadata.map(async (item) => {
+        if (item.kind === "bookmark") return item;
+        return {
+          ...item,
+          sourceUrl: await getDownloadURL(storageReference(this.fileStorage, item.storagePath)),
+        };
+      }),
     );
   }
 
   async save(input: TextbookSaveInput, user: AuthUser | null | undefined): Promise<TextbookMetadata> {
+    if (input.kind === "bookmark") {
+      const target = createBookmarkSaveTarget(input, user);
+      await setDoc(doc(this.firestore, target.metadataPath), createMetadataPayload(target.metadata));
+      return target.metadata;
+    }
+
     const target = createTextbookSaveTarget(
       {
         contentType: input.file.type,
         fileName: input.file.name,
         id: input.id,
+        kind: input.kind ?? "pdf",
         noteId: input.noteId,
         pageCount: input.pageCount,
         sizeBytes: input.file.size,
@@ -112,15 +148,13 @@ export class FirebaseTextbookRepository implements TextbookRepository {
       user,
     );
     const fileReference = storageReference(this.fileStorage, target.storagePath);
-    await uploadBytes(fileReference, input.file, { contentType: PDF_CONTENT_TYPE });
-
+    await uploadBytes(fileReference, input.file, { contentType: input.file.type });
     try {
       await setDoc(doc(this.firestore, target.metadataPath), createMetadataPayload(target.metadata));
     } catch (error: unknown) {
       await deleteObject(fileReference).catch(() => undefined);
       throw error;
     }
-
     return target.metadata;
   }
 }

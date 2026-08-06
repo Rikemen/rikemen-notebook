@@ -156,4 +156,21 @@ describe("WorkspaceView", () => {
     expect(wrapper.findComponent({ name: "WorkspaceHeader" }).exists()).toBe(true);
     expect(wrapper.findAll(".movable-panel")).toHaveLength(4);
   });
+
+  it("未保存変更があるとbrowser終了を警告し、panel close前に保存確認する", async () => {
+    const wrapper = mount(WorkspaceView, {
+      global: { plugins: [createPinia()] },
+    });
+    await wrapper.get("[data-testid='whiteboard-markdown']").setValue("未保存の変更");
+    const beforeUnload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(beforeUnload);
+    expect(beforeUnload.defaultPrevented).toBe(true);
+
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    await wrapper.get("[data-panel-id='whiteboard'] [aria-label='閉じる']").trigger("click");
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(wrapper.find(".movable-panel[data-panel-id='whiteboard']").exists()).toBe(true);
+    confirm.mockRestore();
+    wrapper.unmount();
+  });
 });

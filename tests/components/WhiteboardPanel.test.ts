@@ -5,6 +5,38 @@ import WhiteboardPanel from "@/components/whiteboard/WhiteboardPanel.vue";
 import { useWhiteboardStore } from "@/features/whiteboard/whiteboardStore";
 
 describe("WhiteboardPanel", () => {
+  it("previewで#・##・###をh1・h2・h3として本文と同時に表示する", async () => {
+    const wrapper = mount(WhiteboardPanel, {
+      global: { plugins: [createPinia()] },
+      props: { noteId: "note-headings" },
+    });
+    await wrapper.get("[data-testid='whiteboard-markdown']").setValue("# H1\n\n## H2\n\n### H3\n\n本文");
+    await wrapper.get("[data-testid='preview-toggle']").trigger("click");
+
+    expect(wrapper.get("[data-testid='whiteboard-preview'] h1").text()).toBe("H1");
+    expect(wrapper.get("[data-testid='whiteboard-preview'] h2").text()).toBe("H2");
+    expect(wrapper.get("[data-testid='whiteboard-preview'] h3").text()).toBe("H3");
+    expect(wrapper.get("[data-testid='whiteboard-preview'] p").text()).toBe("本文");
+  });
+
+  it("手書きはstroke終了時のdraftを明示保存前からstoreへ退避する", async () => {
+    const pinia = createPinia();
+    const wrapper = mount(WhiteboardPanel, {
+      global: { plugins: [pinia] },
+      props: { noteId: "note-drawing-draft" },
+    });
+    await wrapper.get("[data-testid='add-handwriting']").trigger("click");
+    wrapper.findComponent({ name: "HandwritingCanvas" }).vm.$emit("draft-change", {
+      dataUrl: "data:image/png;base64,draft",
+      strokes: [{ points: [{ x: 1, y: 2 }] }],
+    });
+    await wrapper.vm.$nextTick();
+
+    const store = useWhiteboardStore(pinia);
+    expect(store.documentForNote("note-drawing-draft").drawings).toHaveLength(1);
+    expect(store.documentForNote("note-drawing-draft").pageState.pages[0].markdown).toContain("drawing:");
+    expect(store.statusForNote("note-drawing-draft").state).toBe("dirty");
+  });
   it("Markdown入力、preview切替、ページ追加を表示する", async () => {
     const wrapper = mount(WhiteboardPanel, {
       global: {

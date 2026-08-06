@@ -6,7 +6,8 @@ rules_version = '2';
 // - users/{uid}/notes/{noteId}/chatThreads/{threadId}/messages/{messageId}: AI messages
 // - users/{uid}/notes/{noteId}/whiteboardPages/{pageId}: whiteboard pages
 // - users/{uid}/notes/{noteId}/workspace/{layoutId}: workspace layout
-// - users/{uid}/notes/{noteId}/materials/{materialId}: immutable PDF metadata
+// - users/{uid}/notes/{noteId}/materials/{materialId}: immutable PDF/image/bookmark metadata
+// - users/{uid}/notes/{noteId}/whiteboardDrawings/{drawingId}: drawing Storage metadata
 // - users/{uid}/aiUsage/{date}: server-only quota records
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -131,6 +132,43 @@ service cloud.firestore {
     }
 
     function hasValidMaterial(userId, noteId, materialId) {
+      return hasValidLegacyPdfMaterial(userId, noteId, materialId)
+        || hasValidFileMaterial(userId, noteId, materialId)
+        || hasValidBookmarkMaterial(userId, noteId);
+    }
+
+    function hasValidMaterialBase(data, userId, noteId) {
+      return uidUnchanged(userId)
+        && data.ownerUid is string
+        && data.ownerUid.size() > 0
+        && data.ownerUid.size() <= 128
+        && data.noteId == noteId
+        && data.noteId is string
+        && data.noteId.size() > 0
+        && data.noteId.size() <= 128
+        && data.createdAt is string
+        && data.createdAt.size() > 0
+        && data.createdAt.size() <= 40;
+    }
+
+    function hasValidFileValues(data, userId, noteId, materialId) {
+      return hasValidMaterialBase(data, userId, noteId)
+        && data.contentType in ["application/pdf", "image/jpeg", "image/png"]
+        && data.fileName is string
+        && data.fileName.size() > 0
+        && data.fileName.size() <= 240
+        && data.sizeBytes is int
+        && data.sizeBytes > 0
+        && data.sizeBytes <= 5368709120
+        && data.storagePath is string
+        && data.storagePath.size() > 0
+        && data.storagePath.size() <= 1024
+        && data.storagePath.matches(
+          "^users/" + userId + "/notes/" + noteId + "/materials/" + materialId + "/[^/]+$"
+        );
+    }
+
+    function hasValidLegacyPdfMaterial(userId, noteId, materialId) {
       let data = request.resource.data;
       return data.keys().hasOnly([
           "contentType",
@@ -152,33 +190,108 @@ service cloud.firestore {
           "sizeBytes",
           "storagePath"
         ])
+        && hasValidFileValues(data, userId, noteId, materialId)
+        && data.contentType == "application/pdf"
+        && data.pageCount is int
+        && data.pageCount > 0
+        && data.pageCount <= 100000;
+    }
+
+    function hasValidFileMaterial(userId, noteId, materialId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          "contentType", "createdAt", "fileName", "kind", "noteId", "ownerUid",
+          "pageCount", "sizeBytes", "storagePath"
+        ])
+        && data.keys().hasAll([
+          "contentType", "createdAt", "fileName", "kind", "noteId", "ownerUid",
+          "sizeBytes", "storagePath"
+        ])
+        && hasValidFileValues(data, userId, noteId, materialId)
+        && data.kind in ["pdf", "image"]
+        && ((data.kind == "pdf"
+            && data.contentType == "application/pdf"
+            && data.pageCount is int
+            && data.pageCount > 0
+            && data.pageCount <= 100000)
+          || (data.kind == "image"
+            && data.contentType in ["image/jpeg", "image/png"]
+            && !("pageCount" in data)));
+    }
+
+    function hasValidBookmarkMaterial(userId, noteId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(["createdAt", "kind", "noteId", "ownerUid", "title", "url"])
+        && data.keys().hasAll(["createdAt", "kind", "noteId", "ownerUid", "title", "url"])
+        && hasValidMaterialBase(data, userId, noteId)
+        && data.kind == "bookmark"
+        && data.title is string
+        && data.title.size() > 0
+        && data.title.size() <= 120
+        && data.url is string
+        && data.url.size() > 0
+        && data.url.size() <= 2048
+        && data.url.matches("^https?://[^/@\\s]+([/?#][^\\s]*)?$");
+    }
+
+    function hasValidWhiteboardPage(userId, noteId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          "createdAt", "markdown", "noteId", "ownerUid", "revision", "title", "updatedAt"
+        ])
+        && data.keys().hasAll([
+          "createdAt", "markdown", "noteId", "ownerUid", "revision", "title", "updatedAt"
+        ])
         && uidUnchanged(userId)
         && data.noteId == noteId
-        && data.contentType == "application/pdf"
+        && data.title is string
+        && data.title.size() > 0
+        && data.title.size() <= 120
+        && data.markdown is string
+        && data.markdown.size() <= 200000
+        && data.revision is int
+        && data.revision >= 0
+        && data.revision <= 2147483647
         && data.createdAt is string
         && data.createdAt.size() > 0
         && data.createdAt.size() <= 40
-        && data.fileName is string
-        && data.fileName.size() > 0
-        && data.fileName.size() <= 240
-        && data.ownerUid is string
-        && data.ownerUid.size() > 0
-        && data.ownerUid.size() <= 128
-        && data.noteId is string
-        && data.noteId.size() > 0
-        && data.noteId.size() <= 128
-        && data.pageCount is int
-        && data.pageCount > 0
-        && data.pageCount <= 100000
-        && data.sizeBytes is int
-        && data.sizeBytes > 0
-        && data.sizeBytes <= 5368709120
-        && data.storagePath is string
-        && data.storagePath.size() > 0
-        && data.storagePath.size() <= 1024
-        && data.storagePath.matches(
-          "^users/" + userId + "/notes/" + noteId + "/materials/" + materialId + "/[^/]+$"
-        );
+        && data.updatedAt is string
+        && data.updatedAt.size() > 0
+        && data.updatedAt.size() <= 40;
+    }
+
+    function hasValidWhiteboardDrawing(userId, noteId, drawingId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          "createdAt", "noteId", "ownerUid", "previewPath", "strokesPath", "updatedAt"
+        ])
+        && data.keys().hasAll([
+          "createdAt", "noteId", "ownerUid", "previewPath", "strokesPath", "updatedAt"
+        ])
+        && uidUnchanged(userId)
+        && data.noteId == noteId
+        && data.createdAt is string
+        && data.createdAt.size() > 0
+        && data.createdAt.size() <= 40
+        && data.updatedAt is string
+        && data.updatedAt.size() > 0
+        && data.updatedAt.size() <= 40
+        && data.previewPath == "users/" + userId + "/notes/" + noteId
+          + "/whiteboardDrawings/" + drawingId + "/preview.png"
+        && data.strokesPath == "users/" + userId + "/notes/" + noteId
+          + "/whiteboardDrawings/" + drawingId + "/strokes.json";
+    }
+
+    function hasUnchangedWhiteboardPageIdentity() {
+      return request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.noteId == resource.data.noteId
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    function hasUnchangedWhiteboardDrawingIdentity() {
+      return request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.noteId == resource.data.noteId
+        && request.resource.data.createdAt == resource.data.createdAt;
     }
 
     function hasUnchangedMaterialIdentity() {
@@ -209,7 +322,25 @@ service cloud.firestore {
         }
 
         match /whiteboardPages/{pageId} {
-          allow read, write: if ownsUserPath(userId);
+          allow read, delete: if ownsUserPath(userId) && noteExists(userId, noteId);
+          allow create: if ownsUserPath(userId)
+            && noteExists(userId, noteId)
+            && hasValidWhiteboardPage(userId, noteId);
+          allow update: if ownsUserPath(userId)
+            && noteExists(userId, noteId)
+            && hasValidWhiteboardPage(userId, noteId)
+            && hasUnchangedWhiteboardPageIdentity();
+        }
+
+        match /whiteboardDrawings/{drawingId} {
+          allow read, delete: if ownsUserPath(userId) && noteExists(userId, noteId);
+          allow create: if ownsUserPath(userId)
+            && noteExists(userId, noteId)
+            && hasValidWhiteboardDrawing(userId, noteId, drawingId);
+          allow update: if ownsUserPath(userId)
+            && noteExists(userId, noteId)
+            && hasValidWhiteboardDrawing(userId, noteId, drawingId)
+            && hasUnchangedWhiteboardDrawingIdentity();
         }
 
         match /workspace/{layoutId} {

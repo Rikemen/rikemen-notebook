@@ -77,7 +77,20 @@
 .whiteboard-panel__preview {
   display: grid;
   align-content: start;
+  font-size: 0.92rem;
   gap: var(--space-3);
+}
+
+.whiteboard-panel__preview h1 {
+  font-size: calc(0.92rem + 6pt);
+}
+
+.whiteboard-panel__preview h2 {
+  font-size: calc(0.92rem + 4pt);
+}
+
+.whiteboard-panel__preview h3 {
+  font-size: calc(0.92rem + 2pt);
 }
 
 .whiteboard-panel__preview h1,

@@ -8,14 +8,11 @@
       :note-title="noteTitle"
       :panel-visibility="panelVisibility"
       @select-layout-mode="setLayoutMode"
+      @save-now="saveWhiteboardNow"
       @toggle-panel="togglePanelVisibility"
     />
 
-    <section
-      aria-label="ノートワークスペース"
-      class="workspace-view__stage"
-      :class="{ 'workspace-view__stage--maximized': maximizedPanel }"
-    >
+    <section aria-label="ノートワークスペース" class="workspace-view__stage" :class="{ 'workspace-view__stage--maximized': maximizedPanel }">
       <div ref="panelGridRef" class="workspace-view__panel-grid" :class="panelGridClass">
         <MovablePanel
           v-for="panel in visiblePanels"
@@ -30,12 +27,7 @@
           @resize="resizePanel"
           @restore="restorePanel"
         >
-          <TextbookPanel
-            v-if="panel.id === 'textbook'"
-            :current-user="currentUser"
-            :is-maximized="panel.state === 'maximized'"
-            :note-id="noteId"
-          />
+          <TextbookPanel v-if="panel.id === 'textbook'" :current-user="currentUser" :is-maximized="panel.state === 'maximized'" :note-id="noteId" />
           <WhiteboardPanel v-else-if="panel.id === 'whiteboard'" :note-id="noteId" />
           <AiChatPanel v-else-if="panel.id === 'ai-chat'" :current-user="currentUser" :note-id="noteId" />
           <DiagramCodePanel v-else :note-id="noteId" />
@@ -47,12 +39,12 @@
 </template>
 
 <script lang="ts">
-/* eslint-disable max-lines, max-lines-per-function, max-statements, no-ternary */
-import { computed, defineComponent, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+/* eslint-disable max-lines, max-lines-per-function, max-statements, no-ternary, sonarjs/deprecation */
+import { computed, defineComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { mapFirebaseUser } from "@/features/auth/mapFirebaseUser";
-import { createAutosaveStatus } from "@/features/notes/autosaveStatus";
 import { useNotesStore } from "@/features/notes/notesStore";
+import { useWhiteboardStore } from "@/features/whiteboard/whiteboardStore";
 import type { WorkspacePanelId, WorkspacePanelVisibility } from "@/features/workspace/panels";
 import { workspaceDefaultBounds, type PanelBounds, type WorkspaceLayoutMode } from "@/features/workspace/panelLayout";
 import { useWorkspaceStore } from "@/features/workspace/workspaceStore";
@@ -81,6 +73,7 @@ export default defineComponent({
     const notesStore = useNotesStore();
     const route = useRoute();
     const workspaceStore = useWorkspaceStore();
+    const whiteboardStore = useWhiteboardStore();
     const panelGridRef = ref<HTMLElement | null>(null);
     const stageBounds = ref(workspaceDefaultBounds);
     const currentUser = computed(() => mapFirebaseUser(authStore.user ?? null));
@@ -104,10 +97,9 @@ export default defineComponent({
       whiteboard: workspaceStore.isLayoutPanelVisible(noteId.value, "whiteboard"),
     }));
     const layoutMode = computed(() => workspaceStore.layoutModeForNote(noteId.value));
+    const autosaveStatus = computed(() => whiteboardStore.statusForNote(noteId.value));
     const dockedPanelCount = computed(() =>
-      layoutMode.value === "docked" && !maximizedPanel.value
-        ? visiblePanels.value.filter((panel) => panel.state === "normal").length
-        : 0,
+      layoutMode.value === "docked" && !maximizedPanel.value ? visiblePanels.value.filter((panel) => panel.state === "normal").length : 0,
     );
     const panelGridClass = computed(() => ({
       "workspace-view__panel-grid--count-2": dockedPanelCount.value === 2,
@@ -119,6 +111,12 @@ export default defineComponent({
       if (event.key === "Escape" && maximizedPanel.value) {
         workspaceStore.restoreLayoutPanel(noteId.value, maximizedPanel.value.id);
       }
+    };
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!whiteboardStore.hasUnsavedChanges(noteId.value)) return;
+      event.preventDefault();
+      // beforeunload requires returnValue for browsers that still use the legacy confirmation contract.
+      event.returnValue = "";
     };
 
     const updateStageBounds = () => {
@@ -135,11 +133,21 @@ export default defineComponent({
       updateStageBounds();
       window.addEventListener("resize", updateStageBounds);
       window.addEventListener("keydown", handleWorkspaceKeydown);
+      window.addEventListener("beforeunload", handleBeforeUnload);
     });
     onBeforeUnmount(() => {
       window.removeEventListener("resize", updateStageBounds);
       window.removeEventListener("keydown", handleWorkspaceKeydown);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
     });
+
+    watch(
+      () => [currentUser.value?.uid ?? "", noteId.value] as const,
+      () => {
+        whiteboardStore.loadDocument(currentUser.value, noteId.value).catch(() => undefined);
+      },
+      { immediate: true },
+    );
 
     const movePanel = (panelId: WorkspacePanelId, nextPosition: Pick<PanelBounds, "x" | "y">) =>
       workspaceStore.moveLayoutPanel(noteId.value, panelId, nextPosition, stageBounds.value);
@@ -149,16 +157,25 @@ export default defineComponent({
     const minimizePanel = (panelId: WorkspacePanelId) => workspaceStore.minimizeLayoutPanel(noteId.value, panelId);
     const maximizePanel = (panelId: WorkspacePanelId) => workspaceStore.maximizeLayoutPanel(noteId.value, panelId, stageBounds.value);
     const restorePanel = (panelId: WorkspacePanelId) => workspaceStore.restoreLayoutPanel(noteId.value, panelId);
-    const closePanel = (panelId: WorkspacePanelId) => workspaceStore.closeLayoutPanel(noteId.value, panelId);
+    const closePanel = async (panelId: WorkspacePanelId) => {
+      if (panelId === "whiteboard" && whiteboardStore.hasUnsavedChanges(noteId.value)) {
+        // Native confirmation is intentional: cancelling must keep the panel and its local draft open.
+        // eslint-disable-next-line no-alert
+        const shouldSave = window.confirm("未保存の変更があります。保存してホワイトボードを閉じますか？");
+        if (!shouldSave || !(await whiteboardStore.flushNote(noteId.value))) return;
+      }
+      workspaceStore.closeLayoutPanel(noteId.value, panelId);
+    };
     const togglePanelVisibility = (panelId: WorkspacePanelId) => workspaceStore.toggleLayoutPanelVisibility(noteId.value, panelId);
     const setLayoutMode = async (mode: WorkspaceLayoutMode) => {
       workspaceStore.setLayoutMode(noteId.value, mode);
       await nextTick();
       updateStageBounds();
     };
+    const saveWhiteboardNow = () => whiteboardStore.flushNote(noteId.value);
 
     return {
-      autosaveStatus: createAutosaveStatus(),
+      autosaveStatus,
       closePanel,
       currentUser,
       focusPanel,
@@ -175,6 +192,7 @@ export default defineComponent({
       panelVisibility,
       resizePanel,
       restorePanel,
+      saveWhiteboardNow,
       setLayoutMode,
       togglePanelVisibility,
       visiblePanels,

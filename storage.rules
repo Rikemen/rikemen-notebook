@@ -32,7 +32,24 @@ service firebase.storage {
         && fileName.size() <= 240
         && request.resource.size > 0
         && request.resource.size <= 5368709120
-        && request.resource.contentType == "application/pdf";
+        && request.resource.contentType in ["application/pdf", "image/png", "image/jpeg"];
+    }
+
+    match /users/{userId}/notes/{noteId}/whiteboardDrawings/{drawingId}/{fileName} {
+      allow read, delete: if ownsUserPath(userId);
+      allow create, update: if ownsUserPath(userId)
+        && noteId.size() > 0
+        && noteId.size() <= 128
+        && drawingId.size() > 0
+        && drawingId.size() <= 128
+        && ((fileName == "preview.png"
+            && request.resource.size > 0
+            && request.resource.size <= 10485760
+            && request.resource.contentType == "image/png")
+          || (fileName == "strokes.json"
+            && request.resource.size > 0
+            && request.resource.size <= 2097152
+            && request.resource.contentType == "application/json"));
     }
   }
 }
