@@ -1,5 +1,5 @@
 import { createPinia, setActivePinia } from "pinia";
-import { flushPromises, mount } from "@vue/test-utils";
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 import type { User } from "firebase/auth";
 import HomePage from "@/views/Home.vue";
@@ -22,6 +22,15 @@ const signedInUser = {
   photoURL: null,
   uid: "user-1",
 } as User;
+
+const getNoteCard = (wrapper: VueWrapper, title: string) => {
+  const noteCard = wrapper.findAll(".note-card").find((card) => card.text().includes(title));
+  if (!noteCard) {
+    throw new Error(`ノートカード「${title}」が見つかりません。`);
+  }
+
+  return noteCard;
+};
 
 const mountHome = (signedIn = false) => {
   const pinia = createPinia();
@@ -89,5 +98,29 @@ describe("HomePage", () => {
     expect(wrapper.text()).toContain("行列のノート");
     expect(wrapper.text()).toContain("行列の計算");
     expect(wrapper.text()).not.toContain("微分の基礎");
+  });
+
+  it("HOMEでは確認後に選んだノートだけを削除する", async () => {
+    const { wrapper } = mountHome(true);
+    await flushPromises();
+    const calculusCard = getNoteCard(wrapper, "微分の基礎");
+
+    await calculusCard.get("[data-testid='delete-note']").trigger("click");
+
+    expect(wrapper.find("[role='dialog']").exists()).toBe(true);
+    expect(wrapper.text()).toContain("微分の基礎");
+    expect(wrapper.text()).toContain("行列の計算");
+
+    await wrapper.get("[data-testid='cancel-note-delete']").trigger("click");
+
+    expect(wrapper.find("[role='dialog']").exists()).toBe(false);
+    expect(wrapper.text()).toContain("微分の基礎");
+
+    await calculusCard.get("[data-testid='delete-note']").trigger("click");
+    await wrapper.get("[data-testid='confirm-note-delete']").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain("微分の基礎");
+    expect(wrapper.text()).toContain("行列の計算");
   });
 });
