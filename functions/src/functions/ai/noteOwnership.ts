@@ -9,6 +9,6 @@ export const createFirestoreNoteOwnership = (
 ): NoteOwnershipService => ({
   noteExists: async (uid, noteId) => {
     const snapshot = await database.doc(`users/${uid}/notes/${noteId}`).get();
-    return snapshot.exists;
+    return snapshot.exists && snapshot.data()?.deletionStatus !== "deleting";
   },
 });

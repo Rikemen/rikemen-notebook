@@ -1,24 +1,30 @@
-import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, type Firestore } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, setDoc, type Firestore } from "firebase/firestore";
 import { db } from "@/utils/firebase";
+import { callDeleteNotebook } from "@/utils/functions";
 import { noteDocumentPath, notesCollectionPath } from "@/features/user-data/userDataPaths";
 import type { MathNote } from "@/features/notes/types";
 import type { NotesRepository } from "@/features/notes/notesRepository";
 
 export class FirestoreNotesRepository implements NotesRepository {
-  constructor(private readonly firestore: Firestore = db) {}
+  constructor(
+    private readonly firestore: Firestore = db,
+    private readonly deleteNotebook: (noteId: string) => Promise<unknown> = callDeleteNotebook,
+  ) {}
 
   async list(uid: string) {
     const snapshot = await getDocs(collection(this.firestore, notesCollectionPath(uid)));
-    return snapshot.docs.map((documentSnapshot) => ({
-      ...documentSnapshot.data(),
-      id: documentSnapshot.id,
-      ownerUid: uid,
-    })) as MathNote[];
+    return snapshot.docs
+      .filter((documentSnapshot) => documentSnapshot.data().deletionStatus !== "deleting")
+      .map((documentSnapshot) => ({
+        ...documentSnapshot.data(),
+        id: documentSnapshot.id,
+        ownerUid: uid,
+      })) as MathNote[];
   }
 
   async get(uid: string, noteId: string) {
     const snapshot = await getDoc(doc(this.firestore, noteDocumentPath({ noteId, uid })));
-    if (!snapshot.exists()) {
+    if (!snapshot.exists() || snapshot.data().deletionStatus === "deleting") {
       return null;
     }
 
@@ -46,7 +52,7 @@ export class FirestoreNotesRepository implements NotesRepository {
   }
 
   async remove(uid: string, noteId: string) {
-    await deleteDoc(doc(this.firestore, noteDocumentPath({ noteId, uid })));
+    if (!uid.trim()) throw new Error("uid is required to delete note");
+    await this.deleteNotebook(noteId);
   }
 }
-
