@@ -18,6 +18,7 @@
         <button type="button" :aria-pressed="viewMode === 'md'" data-testid="md-toggle" @click="viewMode = 'md'">md</button>
         <button type="button" :aria-pressed="viewMode === 'preview'" data-testid="preview-toggle" @click="viewMode = 'preview'">preview</button>
       </div>
+      <MarkdownFormattingToolbar :disabled="viewMode !== 'md' || !hasMarkdownSelection" @format="formatMarkdownSelection" />
       <AppIconButton
         class="whiteboard-panel__draw"
         data-testid="add-handwriting"
@@ -30,19 +31,33 @@
 
     <textarea
       v-if="viewMode === 'md'"
+      ref="markdownTextarea"
       v-model="currentMarkdown"
       class="whiteboard-panel__markdown"
       data-testid="whiteboard-markdown"
       aria-label="Markdownノート"
+      @click="syncMarkdownSelection"
+      @input="syncMarkdownSelection"
+      @keyup="syncMarkdownSelection"
+      @select="syncMarkdownSelection"
     />
     <section v-else class="whiteboard-panel__preview" data-testid="whiteboard-preview" aria-label="Markdownプレビュー">
       <template v-for="block in previewBlocks" :key="block.id">
-        <component :is="`h${block.level}`" v-if="block.type === 'heading'">{{ block.text }}</component>
-        <p v-else-if="block.type === 'paragraph'">{{ block.text }}</p>
+        <component :is="`h${block.level}`" v-if="block.type === 'heading'">
+          <MarkdownInlineContent :nodes="block.content" />
+        </component>
+        <p v-else-if="block.type === 'paragraph'">
+          <MarkdownInlineContent :nodes="block.content" />
+        </p>
         <pre v-else-if="block.type === 'code'"><code>{{ block.text }}</code></pre>
         <ul v-else-if="block.type === 'list'">
-          <li v-for="item in block.items" :key="item">{{ item }}</li>
+          <li v-for="(item, itemIndex) in block.items" :key="itemIndex">
+            <MarkdownInlineContent :nodes="item" />
+          </li>
         </ul>
+        <blockquote v-else-if="block.type === 'quote'">
+          <MarkdownInlineContent :nodes="block.content" />
+        </blockquote>
         <figure v-else-if="block.type === 'drawing'" class="whiteboard-panel__drawing">
           <button type="button" :data-testid="drawingTestId(block)" @click="openDrawingDialog(drawingId(block))">
             <img :src="drawingDataUrl(block)" alt="手書きメモ" />
@@ -70,12 +85,15 @@
 
 <script lang="ts">
 /* eslint-disable max-lines-per-function, max-statements */
-import { computed, defineComponent, ref } from "vue";
+import { computed, defineComponent, nextTick, ref } from "vue";
+import { applyMarkdownFormatting, type MarkdownFormatAction } from "@/features/whiteboard/markdownFormatting";
 import { renderMarkdownPreview, type MarkdownPreviewBlock } from "@/features/whiteboard/markdownPreview";
 import { createDrawingMarkdown, createWhiteboardDrawing, type WhiteboardStroke } from "@/features/whiteboard/whiteboardDrawings";
 import { useWhiteboardStore, type WhiteboardViewMode } from "@/features/whiteboard/whiteboardStore";
 import AppIconButton from "@/components/ui/AppIconButton.vue";
 import HandwritingCanvas from "@/components/whiteboard/HandwritingCanvas.vue";
+import MarkdownFormattingToolbar from "@/components/whiteboard/MarkdownFormattingToolbar.vue";
+import MarkdownInlineContent from "@/components/whiteboard/MarkdownInlineContent.vue";
 import WhiteboardDrawingDialog from "@/components/whiteboard/WhiteboardDrawingDialog.vue";
 
 const createDrawingId = () => {
@@ -109,6 +127,8 @@ export default defineComponent({
   components: {
     AppIconButton,
     HandwritingCanvas,
+    MarkdownFormattingToolbar,
+    MarkdownInlineContent,
     WhiteboardDrawingDialog,
   },
   props: {
@@ -122,26 +142,56 @@ export default defineComponent({
     const document = computed(() => store.documentForNote(props.noteId));
     const state = computed(() => document.value.pageState);
     const drawings = computed(() => document.value.drawings);
-    const viewMode = computed({
-      get: () => document.value.viewMode,
-      set: (mode: WhiteboardViewMode) => store.setViewMode(props.noteId, mode),
-    });
     const editingDrawingId = ref("");
     const selectedDrawingId = ref("");
     const isHandwritingOpen = ref(false);
+    const markdownTextarea = ref<HTMLTextAreaElement | null>(null);
+    const markdownSelection = ref({ end: 0, start: 0 });
+    const clearMarkdownSelection = () => {
+      markdownSelection.value = { end: 0, start: 0 };
+    };
+    const viewMode = computed({
+      get: () => document.value.viewMode,
+      set: (mode: WhiteboardViewMode) => {
+        store.setViewMode(props.noteId, mode);
+        clearMarkdownSelection();
+      },
+    });
     const currentPage = computed(() => state.value.pages.find((page) => page.id === state.value.selectedPageId) ?? state.value.pages[0]);
     const currentMarkdown = computed({
       get: () => currentPage.value?.markdown ?? "",
       set: (markdown: string) => store.updateMarkdown(props.noteId, markdown),
     });
     const previewBlocks = computed(() => renderMarkdownPreview(currentMarkdown.value, drawings.value));
+    const hasMarkdownSelection = computed(() => markdownSelection.value.end > markdownSelection.value.start);
     const editingDrawing = computed(() => drawings.value.find((drawing) => drawing.id === editingDrawingId.value) ?? null);
     const selectedDrawing = computed(() => drawings.value.find((drawing) => drawing.id === selectedDrawingId.value) ?? null);
     const addPage = () => {
       store.addPage(props.noteId);
+      clearMarkdownSelection();
     };
     const selectPage = (pageId: string) => {
       store.selectPage(props.noteId, pageId);
+      clearMarkdownSelection();
+    };
+    const syncMarkdownSelection = () => {
+      const textarea = markdownTextarea.value;
+      if (!textarea) return;
+      markdownSelection.value = { end: textarea.selectionEnd, start: textarea.selectionStart };
+    };
+    const formatMarkdownSelection = (action: MarkdownFormatAction) => {
+      const result = applyMarkdownFormatting({
+        action,
+        selectionEnd: markdownSelection.value.end,
+        selectionStart: markdownSelection.value.start,
+        value: currentMarkdown.value,
+      });
+      currentMarkdown.value = result.value;
+      markdownSelection.value = { end: result.selectionEnd, start: result.selectionStart };
+      nextTick(() => {
+        markdownTextarea.value?.focus();
+        markdownTextarea.value?.setSelectionRange(result.selectionStart, result.selectionEnd);
+      }).catch(() => undefined);
     };
     const closeHandwriting = () => {
       isHandwritingOpen.value = false;
@@ -211,7 +261,10 @@ export default defineComponent({
       drawings,
       editingDrawing,
       editSelectedDrawing,
+      formatMarkdownSelection,
+      hasMarkdownSelection,
       isHandwritingOpen,
+      markdownTextarea,
       openDrawingDialog,
       openNewDrawing,
       previewBlocks,
@@ -219,6 +272,7 @@ export default defineComponent({
       selectPage,
       selectedDrawing,
       state,
+      syncMarkdownSelection,
       viewMode,
     };
   },

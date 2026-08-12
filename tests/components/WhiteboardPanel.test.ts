@@ -19,6 +19,91 @@ describe("WhiteboardPanel", () => {
     expect(wrapper.get("[data-testid='whiteboard-preview'] p").text()).toBe("本文");
   });
 
+  it("選択文字へtoolbar書式を適用し、focusと選択範囲を維持してdirtyにする", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const wrapper = mount(WhiteboardPanel, {
+      global: { plugins: [pinia] },
+      props: { noteId: "note-formatting" },
+      attachTo: document.body,
+    });
+    const textarea = wrapper.get<HTMLTextAreaElement>("[data-testid='whiteboard-markdown']");
+    await textarea.setValue("選択する本文");
+    textarea.element.focus();
+    textarea.element.setSelectionRange(0, 2);
+    await textarea.trigger("select");
+
+    const toolbar = wrapper.get("[aria-label='Markdown書式']");
+    expect(toolbar.findAll("button").every((button) => button.attributes("disabled") === undefined)).toBe(true);
+    await toolbar.get("[aria-label='太字']").trigger("click");
+    await wrapper.vm.$nextTick();
+
+    expect(textarea.element.value).toBe("**選択**する本文");
+    expect(document.activeElement).toBe(textarea.element);
+    expect(textarea.element.selectionStart).toBe(2);
+    expect(textarea.element.selectionEnd).toBe(4);
+    expect(useWhiteboardStore(pinia).statusForNote("note-formatting").state).toBe("dirty");
+
+    await wrapper.get("[data-testid='preview-toggle']").trigger("click");
+    expect(wrapper.get("[data-testid='whiteboard-preview'] strong").text()).toBe("選択");
+    expect(
+      wrapper
+        .get("[aria-label='Markdown書式']")
+        .findAll("button")
+        .every((button) => button.attributes("disabled") !== undefined),
+    ).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("書式toolbarをpreview切替の右、手書き操作の左へ配置する", () => {
+    const wrapper = mount(WhiteboardPanel, {
+      global: { plugins: [createPinia()] },
+      props: { noteId: "note-toolbar-order" },
+    });
+    const children = Array.from(wrapper.get(".whiteboard-panel__toolbar").element.children);
+
+    expect(children[0]?.classList).toContain("whiteboard-panel__segments");
+    expect(children[1]?.classList).toContain("markdown-formatting-toolbar");
+    expect(children[2]?.classList).toContain("whiteboard-panel__draw");
+    expect(wrapper.get("[aria-label='太字']").attributes("disabled")).toBeDefined();
+  });
+
+  it("previewから編集へ戻ると以前の選択範囲を破棄する", async () => {
+    const wrapper = mount(WhiteboardPanel, {
+      global: { plugins: [createPinia()] },
+      props: { noteId: "note-selection-reset" },
+    });
+    const textarea = wrapper.get<HTMLTextAreaElement>("[data-testid='whiteboard-markdown']");
+    await textarea.setValue("選択する本文");
+    textarea.element.setSelectionRange(0, 2);
+    await textarea.trigger("select");
+    expect(wrapper.get("[aria-label='太字']").attributes("disabled")).toBeUndefined();
+
+    await wrapper.get("[data-testid='preview-toggle']").trigger("click");
+    expect(wrapper.get("[aria-label='Markdown書式']").findAll("button")).toHaveLength(6);
+    expect(wrapper.get("[aria-label='太字']").attributes("disabled")).toBeDefined();
+    await wrapper.get("[data-testid='md-toggle']").trigger("click");
+
+    expect(wrapper.get("[aria-label='太字']").attributes("disabled")).toBeDefined();
+  });
+
+  it("inline書式と引用を意味的要素で表示し、任意HTMLを実行しない", async () => {
+    const wrapper = mount(WhiteboardPanel, {
+      global: { plugins: [createPinia()] },
+      props: { noteId: "note-safe-preview" },
+    });
+    await wrapper.get("[data-testid='whiteboard-markdown']").setValue("> **太字**と<u>下線</u>\n\n*斜体* ~~取消~~ <script>alert(1)</script>");
+    await wrapper.get("[data-testid='preview-toggle']").trigger("click");
+
+    const preview = wrapper.get("[data-testid='whiteboard-preview']");
+    expect(preview.get("blockquote strong").text()).toBe("太字");
+    expect(preview.get("blockquote u").text()).toBe("下線");
+    expect(preview.get("p em").text()).toBe("斜体");
+    expect(preview.get("p del").text()).toBe("取消");
+    expect(preview.find("script").exists()).toBe(false);
+    expect(preview.text()).toContain("<script>alert(1)</script>");
+  });
+
   it("手書きはstroke終了時のdraftを明示保存前からstoreへ退避する", async () => {
     const pinia = createPinia();
     const wrapper = mount(WhiteboardPanel, {
