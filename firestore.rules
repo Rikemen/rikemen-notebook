@@ -6,7 +6,7 @@ rules_version = '2';
 // - users/{uid}/notes/{noteId}/chatThreads/{threadId}/messages/{messageId}: AI messages
 // - users/{uid}/notes/{noteId}/whiteboardPages/{pageId}: whiteboard pages
 // - users/{uid}/notes/{noteId}/workspace/{layoutId}: workspace layout
-// - users/{uid}/notes/{noteId}/materials/{materialId}: immutable PDF/image/bookmark metadata
+// - users/{uid}/notes/{noteId}/materials/{materialId}: PDF/image/bookmark metadata; file displayName is mutable
 // - users/{uid}/notes/{noteId}/whiteboardDrawings/{drawingId}: drawing Storage metadata
 // - users/{uid}/aiUsage/{date}: server-only quota records
 service cloud.firestore {
@@ -33,6 +33,13 @@ service cloud.firestore {
 
     function noteExists(userId, noteId) {
       return exists(/databases/$(database)/documents/users/$(userId)/notes/$(noteId));
+    }
+
+    function noteIsActive(userId, noteId) {
+      return noteExists(userId, noteId)
+        && !("deletionStatus" in get(
+          /databases/$(database)/documents/users/$(userId)/notes/$(noteId)
+        ).data);
     }
 
     function hasAllowedNoteFields() {
@@ -151,8 +158,17 @@ service cloud.firestore {
         && data.createdAt.size() <= 40;
     }
 
+    function hasValidMaterialDisplayName(data) {
+      return !("displayName" in data)
+        || (data.displayName is string
+          && data.displayName.size() > 0
+          && data.displayName.size() <= 120
+          && data.displayName.matches("^[^\\n\\r\\t]+$"));
+    }
+
     function hasValidFileValues(data, userId, noteId, materialId) {
       return hasValidMaterialBase(data, userId, noteId)
+        && hasValidMaterialDisplayName(data)
         && data.contentType in ["application/pdf", "image/jpeg", "image/png"]
         && data.fileName is string
         && data.fileName.size() > 0
@@ -173,6 +189,7 @@ service cloud.firestore {
       return data.keys().hasOnly([
           "contentType",
           "createdAt",
+          "displayName",
           "fileName",
           "noteId",
           "ownerUid",
@@ -200,7 +217,7 @@ service cloud.firestore {
     function hasValidFileMaterial(userId, noteId, materialId) {
       let data = request.resource.data;
       return data.keys().hasOnly([
-          "contentType", "createdAt", "fileName", "kind", "noteId", "ownerUid",
+          "contentType", "createdAt", "displayName", "fileName", "kind", "noteId", "ownerUid",
           "pageCount", "sizeBytes", "storagePath"
         ])
         && data.keys().hasAll([
@@ -296,7 +313,8 @@ service cloud.firestore {
 
     function hasUnchangedMaterialIdentity() {
       return uidNotModified()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([]);
+        && "displayName" in request.resource.data
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["displayName"]);
     }
 
     match /users/{userId} {
@@ -307,53 +325,67 @@ service cloud.firestore {
       }
 
       match /notes/{noteId} {
-        allow read, delete: if ownsUserPath(userId);
-        allow create, update: if ownsUserPath(userId) && hasAllowedNoteFields() && hasValidNoteShape();
+        allow read: if ownsUserPath(userId);
+        allow delete: if false;
+        allow create: if ownsUserPath(userId) && hasAllowedNoteFields() && hasValidNoteShape();
+        allow update: if ownsUserPath(userId)
+          && !("deletionStatus" in resource.data)
+          && hasAllowedNoteFields()
+          && hasValidNoteShape();
 
         match /chatThreads/{threadId} {
-          allow read, delete: if ownsUserPath(userId);
-          allow create, update: if ownsUserPath(userId) && hasValidChatThread(userId, noteId);
+          allow read: if ownsUserPath(userId) && noteIsActive(userId, noteId);
+          allow delete: if ownsUserPath(userId);
+          allow create, update: if ownsUserPath(userId)
+            && noteIsActive(userId, noteId)
+            && hasValidChatThread(userId, noteId);
 
           match /messages/{messageId} {
-            allow read, delete: if ownsUserPath(userId);
+            allow read: if ownsUserPath(userId) && noteIsActive(userId, noteId);
+            allow delete: if ownsUserPath(userId);
             allow create, update: if ownsUserPath(userId)
+              && noteIsActive(userId, noteId)
               && hasValidChatMessage(userId, noteId, threadId);
           }
         }
 
         match /whiteboardPages/{pageId} {
-          allow read, delete: if ownsUserPath(userId) && noteExists(userId, noteId);
+          allow read: if ownsUserPath(userId) && noteIsActive(userId, noteId);
+          allow delete: if ownsUserPath(userId);
           allow create: if ownsUserPath(userId)
-            && noteExists(userId, noteId)
+            && noteIsActive(userId, noteId)
             && hasValidWhiteboardPage(userId, noteId);
           allow update: if ownsUserPath(userId)
-            && noteExists(userId, noteId)
+            && noteIsActive(userId, noteId)
             && hasValidWhiteboardPage(userId, noteId)
             && hasUnchangedWhiteboardPageIdentity();
         }
 
         match /whiteboardDrawings/{drawingId} {
-          allow read, delete: if ownsUserPath(userId) && noteExists(userId, noteId);
+          allow read: if ownsUserPath(userId) && noteIsActive(userId, noteId);
+          allow delete: if ownsUserPath(userId);
           allow create: if ownsUserPath(userId)
-            && noteExists(userId, noteId)
+            && noteIsActive(userId, noteId)
             && hasValidWhiteboardDrawing(userId, noteId, drawingId);
           allow update: if ownsUserPath(userId)
-            && noteExists(userId, noteId)
+            && noteIsActive(userId, noteId)
             && hasValidWhiteboardDrawing(userId, noteId, drawingId)
             && hasUnchangedWhiteboardDrawingIdentity();
         }
 
         match /workspace/{layoutId} {
-          allow read, write: if ownsUserPath(userId);
+          allow read: if ownsUserPath(userId) && noteIsActive(userId, noteId);
+          allow create, update: if ownsUserPath(userId) && noteIsActive(userId, noteId);
+          allow delete: if ownsUserPath(userId);
         }
 
         match /materials/{materialId} {
-          allow read: if ownsUserPath(userId) && noteExists(userId, noteId);
+          allow read: if ownsUserPath(userId) && noteIsActive(userId, noteId);
           allow create: if ownsUserPath(userId)
-            && noteExists(userId, noteId)
+            && noteIsActive(userId, noteId)
             && hasValidMaterial(userId, noteId, materialId);
           allow update: if ownsUserPath(userId)
-            && noteExists(userId, noteId)
+            && noteIsActive(userId, noteId)
             && hasValidMaterial(userId, noteId, materialId)
             && hasUnchangedMaterialIdentity();
           allow delete: if ownsUserPath(userId);

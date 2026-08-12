@@ -55,7 +55,15 @@ describe("firestoreRules", () => {
 
   it("教材作成と読込には親ノートの存在を要求する", () => {
     expect(rules).toContain("function noteExists(userId, noteId)");
-    expect(rules).toContain("noteExists(userId, noteId)");
+    expect(rules).toContain("function noteIsActive(userId, noteId)");
+    expect(rules).toContain("noteIsActive(userId, noteId)");
+  });
+
+  it("親ノートの直接削除を拒否し、削除中は配下の更新を許可しない", () => {
+    expect(rules).toContain("allow delete: if false;");
+    expect(rules).toContain('!("deletionStatus" in resource.data)');
+    expect(rules).toContain('!("deletionStatus" in get(');
+    expect(rules).toContain("allow delete: if ownsUserPath(userId);");
   });
 
   it("画像・ブックマークを種別別の厳格schemaで検証する", () => {
@@ -65,6 +73,15 @@ describe("firestoreRules", () => {
     expect(rules).toContain('data.kind == "bookmark"');
     expect(rules).toContain("data.url.size() <= 2048");
     expect(rules).toContain('data.url.matches("^https?://');
+  });
+
+  it("PDF・画像のdisplayNameだけを所有者が更新できる", () => {
+    expect(rules).toContain("function hasValidMaterialDisplayName(data)");
+    expect(rules).toContain('"displayName"');
+    expect(rules).toContain("data.displayName.size() <= 120");
+    expect(rules).toContain('affectedKeys().hasOnly(["displayName"])');
+    expect(rules).toContain('"displayName" in request.resource.data');
+    expect(rules).toContain("hasValidMaterial(userId, noteId, materialId)");
   });
 
   it("ホワイトボードpageとdrawingを所有者・親note・サイズで検証する", () => {
