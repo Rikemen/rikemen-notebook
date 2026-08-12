@@ -130,4 +130,50 @@ describe("textbookRepository", () => {
       ),
     ).toThrow("httpまたはhttps");
   });
+
+  it("ファイル保存の完了進捗と表示URLを返す", async () => {
+    const repository = new InMemoryTextbookRepository();
+    const onProgress = vi.fn();
+    const file = new File(["pdf"], "textbook.pdf", { type: "application/pdf" });
+
+    const saved = await repository.save(
+      { file, id: "material-progress", noteId: "note-1", pageCount: 2 },
+      user,
+      { onProgress },
+    );
+
+    expect(onProgress).toHaveBeenCalledWith({ bytesTransferred: file.size, ratio: 1, totalBytes: file.size });
+    expect(saved).toMatchObject({ kind: "pdf", sourceUrl: expect.stringContaining("material-progress") });
+  });
+
+  it("保存済みファイルのdisplayNameだけを変更する", async () => {
+    const repository = new InMemoryTextbookRepository();
+    const file = new File(["pdf"], "original.pdf", { type: "application/pdf" });
+    await repository.save({ file, id: "rename-1", noteId: "note-1", pageCount: 2 }, user);
+
+    await repository.rename(
+      { displayName: "  解析学.pdf  ", id: "rename-1", noteId: "note-1" },
+      user,
+    );
+
+    await expect(repository.list(user.uid, "note-1")).resolves.toContainEqual(
+      expect.objectContaining({ displayName: "解析学.pdf", fileName: "original.pdf" }),
+    );
+  });
+
+  it("ブックマークのrenameと中断済み保存を拒否する", async () => {
+    const repository = new InMemoryTextbookRepository();
+    await repository.save({ id: "bookmark-rename", kind: "bookmark", noteId: "note-1", title: "Example", url: "https://example.com" }, user);
+
+    await expect(repository.rename({ displayName: "変更", id: "bookmark-rename", noteId: "note-1" }, user)).rejects.toThrow();
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      repository.save(
+        { file: new File(["pdf"], "cancel.pdf", { type: "application/pdf" }), id: "cancel", noteId: "note-1", pageCount: 1 },
+        user,
+        { signal: controller.signal },
+      ),
+    ).rejects.toMatchObject({ name: "AbortError" });
+  });
 });

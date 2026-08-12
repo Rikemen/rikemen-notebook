@@ -8,9 +8,17 @@
       <p class="textbook-panel__limit">上限: {{ limitLabel }}</p>
       <p v-if="errorMessage" class="textbook-panel__error">{{ errorMessage }}</p>
       <p v-if="loadError" class="textbook-panel__error">{{ loadError }}</p>
+      <p v-if="largePdfMessage" class="textbook-panel__notice">{{ largePdfMessage }}</p>
       <p v-if="isLoading" class="textbook-panel__limit" aria-live="polite">保存済み教材を読み込んでいます。</p>
       <div class="textbook-panel__material-list">
-        <TextbookList :selected-id="selectedTextbookId" :textbooks="materials" @select="selectTextbook" />
+        <TextbookList
+          :selected-id="selectedTextbookId"
+          :textbooks="materials"
+          @cancel-upload="cancelUpload"
+          @rename="renameMaterial"
+          @retry-upload="retryUpload"
+          @select="selectTextbook"
+        />
       </div>
     </section>
 
@@ -29,6 +37,7 @@
       v-else
       class="textbook-panel__body textbook-panel__body--preview"
       :class="{
+        'textbook-panel__body--image-preview': selectedMaterial?.kind === 'image',
         'textbook-panel__body--preview-maximized': isMaximized,
         'textbook-panel__body--thumbnails-collapsed': thumbnailsCollapsed,
       }"
@@ -38,9 +47,11 @@
         v-else
         :page="selectedPage"
         :pdf-document="selectedPdfDocument"
+        :load-progress="pdfLoadState.progress"
+        :load-status="pdfLoadState.status"
         :source-url="selectedMaterial?.sourceUrl"
         :textbook-title="selectedTextbookTitle"
-        :zoom-enabled="isMaximized"
+        @retry="retryPdfLoad"
       />
       <PageThumbnailStrip
         v-if="selectedMaterial?.kind !== 'image'"
@@ -69,6 +80,9 @@ import {
   validateBookmark,
   validateMaterialFile,
 } from "@/features/textbook/materials";
+import { largePdfNotice } from "@/features/textbook/largePdfPolicy";
+import { createMaterialUploadManager } from "@/features/textbook/materialUploadManager";
+import { materialObjectUrls } from "@/features/textbook/objectUrlRegistry";
 import type { MaterialTocItem } from "@/features/textbook/materialTableOfContents";
 import { type MaterialPanelMode, useTextbookPanelStore } from "@/features/textbook/textbookPanelStore";
 import type { TextbookRepository } from "@/features/textbook/textbookRepository";
@@ -150,6 +164,11 @@ export default defineComponent({
     const pages = computed(() => Array.from({ length: selectedMaterial.value?.pageCount ?? 1 }, (_value, index) => index + 1));
     const selectedTextbookTitle = computed(() => selectedMaterial.value?.title ?? "資料が選択されていません");
     const selectedTableOfContents = computed(() => panelState.value.tocByMaterialId[selectedTextbookId.value] ?? []);
+    const largePdfMessage = computed(() => {
+      const material = selectedMaterial.value;
+      if (material?.kind !== "pdf") return "";
+      return largePdfNotice(material.sizeBytes ?? 0, material.pageCount);
+    });
     const description = computed(() => {
       if (canPersistHistory(props.currentUser)) {
         return "アップロードした教材は自分の教材履歴に保存されます。";
@@ -170,7 +189,7 @@ export default defineComponent({
       return [];
     });
     const repository = computed(() => props.repository ?? defaultRepository);
-    const { loadPdfDocument, pdfDocument, pdfDocumentSource } = usePdfDocument(() => props.pdfLoader);
+    const { loadPdfDocument, pdfDocument, pdfDocumentSource, pdfLoadState } = usePdfDocument(() => props.pdfLoader);
     const selectedPdfDocument = computed(() => {
       if (selectedMaterial.value?.sourceUrl !== pdfDocumentSource.value) {
         return null;
@@ -178,6 +197,35 @@ export default defineComponent({
       return pdfDocument.value;
     });
     let loadRequestId = 0;
+    const uploadManager = createMaterialUploadManager({
+      getRepository: () => repository.value,
+      getUser: () => props.currentUser,
+      onFailed: (materialId, failure) => {
+        store.updateMaterial(props.noteId, materialId, {
+          status: failure === "cancelled" ? "cancelled" : "error",
+        });
+        errorMessage.value = failure === "cancelled"
+          ? "資料のアップロードを取り消しました。再試行できます。"
+          : "資料の保存に失敗しました。プレビューはこの画面で一時利用できます。";
+      },
+      onProgress: (materialId, ratio) => {
+        store.updateMaterial(props.noteId, materialId, { uploadProgress: ratio });
+      },
+      onSaved: (materialId, saved) => {
+        if (saved.kind === "bookmark") return;
+        store.updateMaterial(props.noteId, materialId, {
+          sourceUrl: saved.sourceUrl,
+          status: "saved",
+          storagePath: saved.storagePath,
+          uploadProgress: 1,
+        });
+        materialObjectUrls.release(materialId);
+      },
+      onStarted: (materialId) => {
+        errorMessage.value = "";
+        store.updateMaterial(props.noteId, materialId, { status: "saving", uploadProgress: 0 });
+      },
+    });
 
     watch(
       () => [props.currentUser?.uid ?? "", props.noteId] as const,
@@ -194,6 +242,7 @@ export default defineComponent({
           const savedTextbooks = await repository.value.list(uid, noteId);
           if (requestId === loadRequestId) {
             store.hydrateMaterials(noteId, savedTextbooks.map(createMaterialFromSavedTextbook));
+            savedTextbooks.forEach((material) => materialObjectUrls.release(material.id));
           }
         } catch {
           if (requestId === loadRequestId) {
@@ -241,12 +290,12 @@ export default defineComponent({
 
       errorMessage.value = "";
       const materialId = createId();
-      const sourceUrl = URL.createObjectURL(file);
+      const sourceUrl = materialObjectUrls.create(materialId, file);
       let pageCount = 1;
       if (validation.kind === "pdf") {
         const document = await loadPdfDocument(sourceUrl);
         if (!document) {
-          URL.revokeObjectURL(sourceUrl);
+          materialObjectUrls.release(materialId);
           errorMessage.value = "PDFを読み込めませんでした。別のPDFを選択してください。";
           return;
         }
@@ -265,25 +314,13 @@ export default defineComponent({
       emit("select-file", file);
 
       if (props.currentUser) {
-        try {
-          const metadata = await repository.value.save(
-            {
-              file,
-              id: materialId,
-              kind: validation.kind,
-              noteId: props.noteId,
-              pageCount,
-            },
-            props.currentUser,
-          );
-          store.updateMaterial(props.noteId, materialId, {
-            status: "saved",
-            storagePath: metadata.kind === "bookmark" ? undefined : metadata.storagePath,
-          });
-        } catch {
-          store.updateMaterial(props.noteId, materialId, { status: "error" });
-          errorMessage.value = "資料の保存に失敗しました。プレビューはこの画面で一時利用できます。";
-        }
+        uploadManager.start({
+          file,
+          id: materialId,
+          kind: validation.kind,
+          noteId: props.noteId,
+          pageCount,
+        }).catch(() => undefined);
       }
     };
     const addBookmark = async (input: { title: string; url: string }) => {
@@ -325,6 +362,31 @@ export default defineComponent({
     const selectTextbook = (textbookId: string) => {
       store.selectTextbook(props.noteId, textbookId);
     };
+    const cancelUpload = (materialId: string) => uploadManager.cancel(materialId);
+    const retryUpload = (materialId: string) => {
+      uploadManager.retry(materialId).catch(() => undefined);
+    };
+    const retryPdfLoad = () => {
+      const sourceUrl = selectedMaterial.value?.sourceUrl;
+      if (sourceUrl) loadPdfDocument(sourceUrl).catch(() => undefined);
+    };
+    const renameMaterial = async ([materialId, displayName]: [string, string]) => {
+      const material = materials.value.find((candidate) => candidate.id === materialId);
+      if (!material || material.kind === "bookmark" || material.title === displayName) return;
+      const previousTitle = material.title;
+      store.updateMaterial(props.noteId, materialId, { title: displayName });
+      if (material.status === "temporary") return;
+      if (!props.currentUser || material.status !== "saved") {
+        store.updateMaterial(props.noteId, materialId, { title: previousTitle });
+        return;
+      }
+      try {
+        await repository.value.rename({ displayName, id: materialId, noteId: props.noteId }, props.currentUser);
+      } catch {
+        store.updateMaterial(props.noteId, materialId, { title: previousTitle });
+        errorMessage.value = "資料名の変更に失敗しました。元の名前へ戻しました。";
+      }
+    };
     const selectPage = (page: number) => {
       store.selectPage(props.noteId, page);
     };
@@ -352,11 +414,13 @@ export default defineComponent({
     return {
       addBookmark,
       addTocItem,
+      cancelUpload,
       description,
       disabledModes,
       errorMessage,
       handleFileChange,
       isLoading,
+      largePdfMessage,
       limitLabel,
       loadError,
       materials,
@@ -364,6 +428,10 @@ export default defineComponent({
       openTocItem,
       pages,
       pdfDocument,
+      pdfLoadState,
+      renameMaterial,
+      retryPdfLoad,
+      retryUpload,
       selectPage,
       selectTextbook,
       selectedMaterial,

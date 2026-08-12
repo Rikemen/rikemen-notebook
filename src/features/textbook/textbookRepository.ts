@@ -2,6 +2,7 @@
 import type { AuthUser } from "@/features/auth/types";
 import { canUploadFile, SIGNED_IN_UPLOAD_LIMIT_BYTES } from "@/features/auth/accessPolicy";
 import { validateBookmark } from "@/features/textbook/bookmarkMaterial";
+import { validateMaterialDisplayName } from "@/features/textbook/materialDisplayName";
 import { noteMaterialDocumentPath, noteMaterialStoragePath } from "@/features/user-data/userDataPaths";
 
 interface MaterialMetadataBase {
@@ -12,6 +13,7 @@ interface MaterialMetadataBase {
 }
 
 interface FileMaterialMetadataBase extends MaterialMetadataBase {
+  displayName?: string;
   fileName: string;
   sizeBytes: number;
   storagePath: string;
@@ -63,6 +65,23 @@ export interface MaterialBookmarkSaveInput {
 
 export type TextbookSaveInput = MaterialBookmarkSaveInput | MaterialFileSaveInput;
 
+export interface MaterialUploadProgress {
+  bytesTransferred: number;
+  ratio: number;
+  totalBytes: number;
+}
+
+export interface TextbookSaveOptions {
+  onProgress?: (progress: MaterialUploadProgress) => void;
+  signal?: AbortSignal;
+}
+
+export interface MaterialRenameInput {
+  displayName: string;
+  id: string;
+  noteId: string;
+}
+
 export interface TextbookSaveTarget {
   metadata: FileMaterialMetadata;
   metadataPath: string;
@@ -71,8 +90,11 @@ export interface TextbookSaveTarget {
 
 export interface TextbookRepository {
   list(uid: string, noteId: string): Promise<SavedMaterial[]>;
-  save(input: TextbookSaveInput, user: AuthUser | null | undefined): Promise<TextbookMetadata>;
+  rename(input: MaterialRenameInput, user: AuthUser | null | undefined): Promise<void>;
+  save(input: TextbookSaveInput, user: AuthUser | null | undefined, options?: TextbookSaveOptions): Promise<SavedMaterial>;
 }
+
+const abortError = () => new DOMException("Material upload was aborted", "AbortError");
 
 const requireUser = (user: AuthUser | null | undefined): AuthUser => {
   if (!user) throw new Error("login is required to save textbook history");
@@ -172,7 +194,8 @@ export const createBookmarkSaveTarget = (input: MaterialBookmarkSaveInput, user:
 export class InMemoryTextbookRepository implements TextbookRepository {
   private readonly metadata = new Map<string, TextbookMetadata>();
 
-  save(input: TextbookSaveInput, user: AuthUser | null | undefined) {
+  save(input: TextbookSaveInput, user: AuthUser | null | undefined, options: TextbookSaveOptions = {}): Promise<SavedMaterial> {
+    if (options.signal?.aborted) return Promise.reject(abortError());
     if (input.kind === "bookmark") {
       const target = createBookmarkSaveTarget(input, user);
       this.metadata.set(target.metadataPath, target.metadata);
@@ -191,7 +214,21 @@ export class InMemoryTextbookRepository implements TextbookRepository {
       user,
     );
     this.metadata.set(target.metadataPath, target.metadata);
-    return Promise.resolve(target.metadata);
+    options.onProgress?.({ bytesTransferred: input.file.size, ratio: 1, totalBytes: input.file.size });
+    return Promise.resolve({ ...target.metadata, sourceUrl: target.storagePath });
+  }
+
+  rename(input: MaterialRenameInput, user: AuthUser | null | undefined): Promise<void> {
+    const owner = requireUser(user);
+    const validation = validateMaterialDisplayName(input.displayName);
+    if (!validation.ok) return Promise.reject(new Error(validation.message));
+    const metadataPath = noteMaterialDocumentPath({ childId: input.id, noteId: input.noteId, uid: owner.uid });
+    const material = this.metadata.get(metadataPath);
+    if (!material || material.kind === "bookmark" || material.ownerUid !== owner.uid || material.noteId !== input.noteId) {
+      return Promise.reject(new Error("material cannot be renamed"));
+    }
+    this.metadata.set(metadataPath, { ...material, displayName: validation.displayName });
+    return Promise.resolve();
   }
 
   list(uid: string, noteId: string): Promise<SavedMaterial[]> {

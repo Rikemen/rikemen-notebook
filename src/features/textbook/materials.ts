@@ -4,17 +4,19 @@ export { validateBookmark } from "@/features/textbook/bookmarkMaterial";
 import type { SavedMaterial } from "@/features/textbook/textbookRepository";
 
 export type MaterialKind = "bookmark" | "image" | "pdf";
-export type MaterialStatus = "error" | "saved" | "saving" | "temporary";
+export type MaterialStatus = "cancelled" | "error" | "saved" | "saving" | "temporary";
 
 export interface MaterialListItem {
   id: string;
   kind?: MaterialKind;
   pageCount: number;
+  sizeBytes?: number;
   sizeLabel: string;
   sourceUrl?: string;
   status?: MaterialStatus;
   storagePath?: string;
   title: string;
+  uploadProgress?: number;
   uploadedAt: string;
   url?: string;
 }
@@ -84,13 +86,17 @@ export const formatMaterialSize = (bytes: number) => {
   return `${Math.max(megabytes, 0.01).toFixed(1)} MB`;
 };
 
-export const materialStatusLabel = (status: MaterialStatus | undefined) => {
+export const materialStatusLabel = (status: MaterialStatus | undefined, uploadProgress?: number) => {
   const labels: Record<MaterialStatus, string> = {
+    cancelled: "保存取消",
     error: "保存失敗",
     saved: "保存済み",
     saving: "保存中",
     temporary: "一時利用",
   };
+  if (status === "saving" && typeof uploadProgress === "number") {
+    return `${labels.saving} ${Math.round(Math.min(Math.max(uploadProgress, 0), 1) * 100)}%`;
+  }
   return status ? labels[status] : "";
 };
 
@@ -114,6 +120,7 @@ export const createMaterialFromFile = (file: File, id: string, options: CreateMa
   id,
   kind: options.kind ?? "pdf",
   pageCount: options.pageCount ?? 1,
+  sizeBytes: file.size,
   sizeLabel: formatMaterialSize(file.size),
   sourceUrl: options.sourceUrl,
   status: options.status,
@@ -154,11 +161,12 @@ export const createMaterialFromSavedTextbook = (material: SavedMaterial): Materi
     id: material.id,
     kind: material.kind,
     pageCount: material.kind === "pdf" ? material.pageCount : 1,
+    sizeBytes: material.sizeBytes,
     sizeLabel: formatMaterialSize(material.sizeBytes),
     sourceUrl: material.sourceUrl,
     status: "saved",
     storagePath: material.storagePath,
-    title: material.fileName,
+    title: material.displayName ?? material.fileName,
     uploadedAt: formatDate(new Date(material.createdAt)),
   };
 };
