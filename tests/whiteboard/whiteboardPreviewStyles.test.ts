@@ -9,4 +9,10 @@ describe("whiteboardPreviewStyles", () => {
     expect(styles).toContain("font-size: calc(0.92rem + 4pt)");
     expect(styles).toContain("font-size: calc(0.92rem + 6pt)");
   });
+
+  it("コードブロックの上下余白と行高を確保する", () => {
+    expect(styles).toContain("padding-block: var(--space-4)");
+    expect(styles).toContain(".whiteboard-panel__preview pre > code");
+    expect(styles).toContain("line-height: 1.7");
+  });
 });

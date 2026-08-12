@@ -5,12 +5,7 @@
         <h2>{{ note.title }}</h2>
         <p v-if="note.subject">{{ note.subject }}</p>
       </div>
-      <button
-        class="note-card__favorite"
-        :disabled="!canEdit"
-        data-testid="favorite-note"
-        @click="$emit('toggle-favorite', note.id)"
-      >
+      <button class="note-card__favorite" :disabled="!canEdit" data-testid="favorite-note" @click="$emit('toggle-favorite', note.id)">
         {{ note.favorite ? "お気に入り解除" : "お気に入り" }}
       </button>
     </div>
@@ -20,36 +15,25 @@
       </span>
     </div>
     <div class="note-card__actions">
-      <button class="note-card__primary" data-testid="open-note" @click="$emit('open', note.id)">
-        開く
-      </button>
-      <button
-        class="note-card__secondary"
-        :disabled="!canEdit"
-        data-testid="duplicate-note"
-        @click="$emit('duplicate', note.id)"
-      >
-        複製
-      </button>
-      <button
-        class="note-card__danger"
-        :disabled="!canEdit"
-        data-testid="delete-note"
-        @click="$emit('delete', note.id)"
-      >
-        削除
-      </button>
+      <button class="note-card__primary" data-testid="open-note" @click="$emit('open', note.id)">開く</button>
+      <button class="note-card__secondary" :disabled="!canEdit" data-testid="duplicate-note" @click="$emit('duplicate', note.id)">複製</button>
+      <button class="note-card__danger" :disabled="!canEdit" data-testid="delete-note" @click="requestDelete">削除</button>
     </div>
   </article>
+  <NoteDeleteConfirmDialog v-if="isDeleteConfirmOpen" :note-title="note.title" @close="closeDeleteConfirm" @confirm="confirmDelete" />
 </template>
 
 <script lang="ts">
-import { computed, defineComponent, type PropType } from "vue";
+import { computed, defineComponent, ref, type PropType } from "vue";
 import type { AuthUser } from "@/features/auth/types";
 import type { MathNote } from "@/features/notes/types";
+import NoteDeleteConfirmDialog from "@/components/notes/NoteDeleteConfirmDialog.vue";
 
 export default defineComponent({
   name: "NoteCard",
+  components: {
+    NoteDeleteConfirmDialog,
+  },
   props: {
     currentUser: {
       default: null,
@@ -61,11 +45,32 @@ export default defineComponent({
     },
   },
   emits: ["open", "duplicate", "delete", "toggle-favorite"],
-  setup(props) {
+  setup(props, { emit }) {
     const canEdit = computed(() => props.currentUser?.uid === props.note.ownerUid);
+    const isDeleteConfirmOpen = ref(false);
+    const requestDelete = () => {
+      if (canEdit.value) {
+        isDeleteConfirmOpen.value = true;
+      }
+    };
+    const closeDeleteConfirm = () => {
+      isDeleteConfirmOpen.value = false;
+    };
+    const confirmDelete = () => {
+      if (!isDeleteConfirmOpen.value) {
+        return;
+      }
+
+      closeDeleteConfirm();
+      emit("delete", props.note.id);
+    };
 
     return {
       canEdit,
+      closeDeleteConfirm,
+      confirmDelete,
+      isDeleteConfirmOpen,
+      requestDelete,
     };
   },
 });

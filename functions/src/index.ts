@@ -18,3 +18,5 @@ exportIfNeeded("express_server_v2", "server/express_v2", exports);
 
 exportIfNeeded("streamingCall", "server/streaming", exports);
 exportIfNeeded("sendMathChatMessage", "ai/sendMathChatMessage", exports);
+exportIfNeeded("deleteNotebook", "notes/deleteNotebook", exports);
+exportIfNeeded("cleanupDeletingNotebooks", "notes/cleanupDeletingNotebooks", exports);

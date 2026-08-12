@@ -52,7 +52,14 @@
   grid-template-columns: auto minmax(0, 1fr);
 }
 
-.textbook-panel__body--preview-maximized > .textbook-preview {
+.textbook-panel__body--preview-maximized.textbook-panel__body--image-preview {
+  grid-template-areas: "preview";
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.textbook-panel__body--preview-maximized > .textbook-preview,
+.textbook-panel__body--preview-maximized > .image-material-preview {
   grid-area: preview;
 }
 
@@ -116,6 +123,16 @@
   border-radius: var(--radius-md);
   background: var(--color-red-soft);
   color: var(--color-red);
+  font-size: 0.82rem;
+  padding: var(--space-2);
+}
+
+.textbook-panel__notice {
+  margin: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-blue-soft);
+  color: var(--color-text-secondary);
   font-size: 0.82rem;
   padding: var(--space-2);
 }

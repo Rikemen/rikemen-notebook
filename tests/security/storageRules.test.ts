@@ -22,6 +22,9 @@ describe("storageRules", () => {
     expect(rules).toContain("match /users/{userId}/notes/{noteId}/materials/{materialId}/{fileName}");
     expect(rules).toContain("fileName.size() <= 240");
     expect(rules).toContain("materialId.size() <= 128");
+    expect(rules).toContain("function noteIsActive(userId, noteId)");
+    expect(rules).toContain("firestore.exists(");
+    expect(rules).toContain('!("deletionStatus" in firestore.get(');
   });
 
   it("資料画像はPNG/JPEGだけを許可する", () => {

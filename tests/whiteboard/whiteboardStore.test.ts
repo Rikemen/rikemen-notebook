@@ -1,6 +1,7 @@
 import { createPinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthUser } from "@/features/auth/types";
+import { applyMarkdownFormatting } from "@/features/whiteboard/markdownFormatting";
 import { createDrawingMarkdown, createWhiteboardDrawing } from "@/features/whiteboard/whiteboardDrawings";
 import { InMemoryWhiteboardDraftStorage } from "@/features/whiteboard/whiteboardDraftStorage";
 import { InMemoryWhiteboardRepository } from "@/features/whiteboard/whiteboardRepository";
@@ -58,6 +59,27 @@ describe("whiteboardStore", () => {
 
     expect(savePage).toHaveBeenCalledOnce();
     expect(store.statusForNote("note-autosave").state).toBe("saved");
+  });
+
+  it("書式済みMarkdownも最後の操作から30秒後に自動保存する", async () => {
+    vi.useFakeTimers();
+    const repository = new InMemoryWhiteboardRepository();
+    const savePage = vi.spyOn(repository, "savePage");
+    setWhiteboardPersistenceForTest({ repository });
+    const store = useWhiteboardStore();
+    await store.loadDocument(user, "note-format-autosave");
+    const formatted = applyMarkdownFormatting({
+      action: "bold",
+      selectionEnd: 4,
+      selectionStart: 0,
+      value: "保存する本文",
+    });
+
+    store.updateMarkdown("note-format-autosave", formatted.value);
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(savePage).toHaveBeenCalledWith(user, expect.objectContaining({ markdown: "**保存する**本文", noteId: "note-format-autosave" }));
+    expect(store.statusForNote("note-format-autosave").state).toBe("saved");
   });
 
   it("保存する操作は30秒を待たずにflushする", async () => {

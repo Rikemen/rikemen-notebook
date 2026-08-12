@@ -107,4 +107,17 @@ describe("PageThumbnailStrip", () => {
 
     expect(wrapper.find("[aria-label='サムネイルページ切り替え']").exists()).toBe(false);
   });
+
+  it("500ページでも同時に生成するサムネイルを12件へ制限する", () => {
+    const wrapper = mount(PageThumbnailStrip, {
+      props: {
+        pages: Array.from({ length: 500 }, (_value, index) => index + 1),
+        selectedPage: 500,
+      },
+    });
+
+    expect(wrapper.findAll(".thumbnail-strip__item")).toHaveLength(8);
+    expect(wrapper.get("[data-testid='thumbnail-pagination-status']").text()).toBe("42 / 42");
+    expect(wrapper.get("[data-testid='thumbnail-page-500']").attributes("aria-current")).toBe("page");
+  });
 });

@@ -370,6 +370,21 @@ describe("TextbookPanel", () => {
     expect(wrapper.get(".thumbnail-strip").classes()).toContain("thumbnail-strip--vertical");
   });
 
+  it("通常previewでもPDFズーム操作を表示する", async () => {
+    const wrapper = mount(TextbookPanel, {
+      global: { plugins: [createPinia()] },
+      props: { noteId: "note-normal-zoom", pdfLoader: createPdfLoader(2) },
+    });
+    const input = wrapper.get("input");
+    Object.defineProperty(input.element, "files", { value: [createSizedFile(1024)] });
+
+    await input.trigger("change");
+    await flushPromises();
+
+    expect(wrapper.find("[aria-label='PDFズーム']").exists()).toBe(true);
+    expect(wrapper.get("[data-testid='pdf-zoom-status']").text()).toBe("100%");
+  });
+
   it("ログイン時は保存済み教材を現在のノートへ復元する", async () => {
     const repository: TextbookRepository = {
       list: vi.fn().mockResolvedValue([
@@ -378,6 +393,7 @@ describe("TextbookPanel", () => {
           createdAt: "2026-08-01T00:00:00.000Z",
           fileName: "saved.pdf",
           id: "saved-1",
+          kind: "pdf",
           noteId: "note-saved",
           ownerUid: "user-1",
           pageCount: 3,
@@ -386,6 +402,7 @@ describe("TextbookPanel", () => {
           storagePath: "users/user-1/notes/note-saved/materials/saved-1/saved.pdf",
         },
       ]),
+      rename: vi.fn(),
       save: vi.fn(),
     };
     const wrapper = mount(TextbookPanel, {
@@ -413,7 +430,23 @@ describe("TextbookPanel", () => {
   it("ログイン時だけ選択したPDFをrepositoryへ保存する", async () => {
     const repository: TextbookRepository = {
       list: vi.fn().mockResolvedValue([]),
-      save: vi.fn().mockResolvedValue({}),
+      rename: vi.fn(),
+      save: vi.fn(async (input) => {
+        if (input.kind === "bookmark") return {} as never;
+        return {
+          contentType: "application/pdf" as const,
+          createdAt: "2026-08-08T00:00:00.000Z",
+          fileName: input.file.name,
+          id: input.id,
+          kind: "pdf" as const,
+          noteId: input.noteId,
+          ownerUid: user.uid,
+          pageCount: input.pageCount ?? 1,
+          sizeBytes: input.file.size,
+          sourceUrl: "https://storage.example/saved.pdf",
+          storagePath: `users/${user.uid}/notes/${input.noteId}/materials/${input.id}/${input.file.name}`,
+        };
+      }),
     };
     const wrapper = mount(TextbookPanel, {
       global: {
@@ -440,6 +473,7 @@ describe("TextbookPanel", () => {
         noteId: "note-save",
       }),
       user,
+      expect.objectContaining({ onProgress: expect.any(Function), signal: expect.any(AbortSignal) }),
     );
     await wrapper.get("[aria-label='資料一覧']").trigger("click");
     expect(wrapper.text()).toContain("保存済み");
@@ -464,10 +498,38 @@ describe("TextbookPanel", () => {
     expect(wrapper.findComponent({ name: "PageThumbnailStrip" }).exists()).toBe(false);
   });
 
+  it("最大化した画像はサムネイル列なしでpreview全面を使う", async () => {
+    const wrapper = mount(TextbookPanel, {
+      global: { plugins: [createPinia()] },
+      props: { isMaximized: true, noteId: "note-image-maximized", pdfLoader: createPdfLoader() },
+    });
+    const input = wrapper.get("[data-testid='textbook-file']");
+    const file = new File(["image"], "graph.png", { type: "image/png" });
+    Object.defineProperty(input.element, "files", { value: [file] });
+
+    await input.trigger("change");
+    await flushPromises();
+
+    const body = wrapper.get(".textbook-panel__body--preview");
+    expect(body.classes()).toContain("textbook-panel__body--image-preview");
+    expect(body.classes()).toContain("textbook-panel__body--preview-maximized");
+    expect(wrapper.findComponent({ name: "PageThumbnailStrip" }).exists()).toBe(false);
+    expect(wrapper.find("[aria-label='画像ズーム']").exists()).toBe(true);
+  });
+
   it("HTTP(S)ブックマークを保存しnoopener付きの別タブリンクにする", async () => {
     const repository: TextbookRepository = {
       list: vi.fn().mockResolvedValue([]),
-      save: vi.fn().mockResolvedValue({ kind: "bookmark" }),
+      rename: vi.fn(),
+      save: vi.fn().mockResolvedValue({
+        createdAt: "2026-08-08T00:00:00.000Z",
+        id: "bookmark-1",
+        kind: "bookmark",
+        noteId: "note-bookmark",
+        ownerUid: user.uid,
+        title: "公式ドキュメント",
+        url: "https://example.com/docs#intro",
+      }),
     };
     const wrapper = mount(TextbookPanel, {
       global: { plugins: [createPinia()] },
@@ -501,5 +563,56 @@ describe("TextbookPanel", () => {
 
     expect(wrapper.text()).toContain("httpまたはhttpsのURL");
     expect(wrapper.find(".textbook-list__item[href]").exists()).toBe(false);
+  });
+
+  it("保存済み資料の表示名を楽観更新しRepositoryへ保存する", async () => {
+    const repository: TextbookRepository = {
+      list: vi.fn().mockResolvedValue([{
+        contentType: "application/pdf",
+        createdAt: "2026-08-01T00:00:00.000Z",
+        fileName: "original.pdf",
+        id: "rename-1",
+        kind: "pdf",
+        noteId: "note-rename",
+        ownerUid: user.uid,
+        pageCount: 2,
+        sizeBytes: 1024,
+        sourceUrl: "https://storage.example/original.pdf",
+        storagePath: "users/user-1/notes/note-rename/materials/rename-1/original.pdf",
+      }]),
+      rename: vi.fn().mockResolvedValue(undefined),
+      save: vi.fn(),
+    };
+    const wrapper = mount(TextbookPanel, {
+      global: { plugins: [createPinia()] },
+      props: { currentUser: user, noteId: "note-rename", pdfLoader: createPdfLoader(2), repository },
+    });
+    await flushPromises();
+
+    await wrapper.get("[aria-label='original.pdfの資料名を変更']").trigger("click");
+    await wrapper.get("[aria-label='資料名']").setValue("解析学.pdf");
+    await wrapper.get("[aria-label='資料名']").trigger("keydown.enter");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("解析学.pdf");
+    expect(repository.rename).toHaveBeenCalledWith(
+      { displayName: "解析学.pdf", id: "rename-1", noteId: "note-rename" },
+      user,
+    );
+  });
+
+  it("100MiBまたは500ページのPDFに大容量案内を表示する", async () => {
+    const wrapper = mount(TextbookPanel, {
+      global: { plugins: [createPinia()] },
+      props: { currentUser: user, noteId: "note-large", pdfLoader: createPdfLoader(500) },
+    });
+    const input = wrapper.get("[data-testid='textbook-file']");
+    Object.defineProperty(input.element, "files", { value: [createSizedFile(100 * 1024 * 1024)] });
+
+    await input.trigger("change");
+    await flushPromises();
+    await wrapper.get("[aria-label='資料一覧']").trigger("click");
+
+    expect(wrapper.text()).toContain("大きなPDF");
   });
 });

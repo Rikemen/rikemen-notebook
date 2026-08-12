@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateBookmark, validateMaterialFile } from "@/features/textbook/materials";
+import { createMaterialFromSavedTextbook, validateBookmark, validateMaterialFile } from "@/features/textbook/materials";
 
 describe("materials", () => {
   it.each([
@@ -25,5 +25,22 @@ describe("materials", () => {
     });
     expect(validateBookmark("危険", "javascript:alert(1)").ok).toBe(false);
     expect(validateBookmark("資格情報", "https://user:pass@example.com").ok).toBe(false);
+  });
+
+  it("保存済みファイルはdisplayNameを優先し元ファイル名とsizeを保持する", () => {
+    expect(createMaterialFromSavedTextbook({
+      contentType: "application/pdf",
+      createdAt: "2026-08-08T00:00:00.000Z",
+      displayName: "解析学.pdf",
+      fileName: "original.pdf",
+      id: "material-1",
+      kind: "pdf",
+      noteId: "note-1",
+      ownerUid: "user-1",
+      pageCount: 2,
+      sizeBytes: 1024,
+      sourceUrl: "https://storage.example/original.pdf",
+      storagePath: "users/user-1/notes/note-1/materials/material-1/original.pdf",
+    })).toMatchObject({ sizeBytes: 1024, title: "解析学.pdf" });
   });
 });

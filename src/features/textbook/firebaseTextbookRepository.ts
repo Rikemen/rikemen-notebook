@@ -1,23 +1,28 @@
 /* eslint-disable max-statements, no-ternary, prefer-destructuring */
-import { collection, doc, getDocs, setDoc, type Firestore } from "firebase/firestore";
-import { deleteObject, getDownloadURL, ref as storageReference, uploadBytes, type FirebaseStorage } from "firebase/storage";
+import { collection, doc, getDocs, setDoc, updateDoc, type Firestore } from "firebase/firestore";
+import { deleteObject, getDownloadURL, ref as storageReference, uploadBytesResumable, type FirebaseStorage, type UploadTask } from "firebase/storage";
 import type { AuthUser } from "@/features/auth/types";
 import {
   createBookmarkSaveTarget,
   createTextbookSaveTarget,
   type BookmarkMaterialMetadata,
   type FileMaterialMetadata,
+  type MaterialRenameInput,
   type SavedMaterial,
   type TextbookMetadata,
   type TextbookRepository,
   type TextbookSaveInput,
+  type TextbookSaveOptions,
 } from "@/features/textbook/textbookRepository";
-import { noteMaterialsCollectionPath } from "@/features/user-data/userDataPaths";
+import { validateMaterialDisplayName } from "@/features/textbook/materialDisplayName";
+import { noteMaterialDocumentPath, noteMaterialsCollectionPath } from "@/features/user-data/userDataPaths";
 import { db, storage } from "@/utils/firebase";
 
 const isString = (value: unknown): value is string => typeof value === "string";
 const isPositiveInteger = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value) && value > 0;
 const PDF_CONTENT_TYPE = "application/pdf";
+
+const validDisplayName = (value: unknown) => value === undefined || (isString(value) && validateMaterialDisplayName(value).ok);
 
 interface MetadataReadContext {
   id: string;
@@ -50,6 +55,7 @@ const parseFile = ({ id, noteId, uid, value }: MetadataReadContext): FileMateria
     value.noteId !== noteId ||
     !isString(value.createdAt) ||
     !isString(value.fileName) ||
+    !validDisplayName(value.displayName) ||
     !isString(value.storagePath) ||
     !isPositiveInteger(value.sizeBytes) ||
     (inferredKind === "pdf" && !isPositiveInteger(value.pageCount))
@@ -57,6 +63,7 @@ const parseFile = ({ id, noteId, uid, value }: MetadataReadContext): FileMateria
     return null;
   const common = {
     createdAt: value.createdAt,
+    ...(isString(value.displayName) ? { displayName: value.displayName } : {}),
     fileName: value.fileName,
     id,
     noteId,
@@ -96,6 +103,7 @@ const createMetadataPayload = (metadata: TextbookMetadata) => {
   return {
     contentType: metadata.contentType,
     createdAt: metadata.createdAt,
+    ...(metadata.displayName ? { displayName: metadata.displayName } : {}),
     fileName: metadata.fileName,
     kind: metadata.kind,
     noteId: metadata.noteId,
@@ -105,6 +113,46 @@ const createMetadataPayload = (metadata: TextbookMetadata) => {
     storagePath: metadata.storagePath,
   };
 };
+
+const uploadAbortError = () => new DOMException("Material upload was aborted", "AbortError");
+
+const waitForUpload = (task: UploadTask, options: TextbookSaveOptions): Promise<void> =>
+  new Promise((resolve, reject) => {
+    let settled = false;
+    let unsubscribe: () => void = () => undefined;
+    let abort = () => undefined;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      options.signal?.removeEventListener("abort", abort);
+      unsubscribe();
+      callback();
+    };
+    abort = () => {
+      task.cancel();
+      finish(() => reject(uploadAbortError()));
+    };
+    if (options.signal?.aborted) {
+      abort();
+      return;
+    }
+    options.signal?.addEventListener("abort", abort, { once: true });
+    const stopObserving = task.on(
+      "state_changed",
+      (snapshot) => {
+        const totalBytes = snapshot.totalBytes;
+        options.onProgress?.({
+          bytesTransferred: snapshot.bytesTransferred,
+          ratio: totalBytes > 0 ? Math.min(Math.max(snapshot.bytesTransferred / totalBytes, 0), 1) : 0,
+          totalBytes,
+        });
+      },
+      (error) => finish(() => reject(error)),
+      () => finish(resolve),
+    );
+    unsubscribe = stopObserving;
+    if (settled) stopObserving();
+  });
 
 export class FirebaseTextbookRepository implements TextbookRepository {
   constructor(
@@ -128,7 +176,7 @@ export class FirebaseTextbookRepository implements TextbookRepository {
     );
   }
 
-  async save(input: TextbookSaveInput, user: AuthUser | null | undefined): Promise<TextbookMetadata> {
+  async save(input: TextbookSaveInput, user: AuthUser | null | undefined, options: TextbookSaveOptions = {}): Promise<SavedMaterial> {
     if (input.kind === "bookmark") {
       const target = createBookmarkSaveTarget(input, user);
       await setDoc(doc(this.firestore, target.metadataPath), createMetadataPayload(target.metadata));
@@ -148,13 +196,23 @@ export class FirebaseTextbookRepository implements TextbookRepository {
       user,
     );
     const fileReference = storageReference(this.fileStorage, target.storagePath);
-    await uploadBytes(fileReference, input.file, { contentType: input.file.type });
+    const uploadTask = uploadBytesResumable(fileReference, input.file, { contentType: input.file.type });
+    await waitForUpload(uploadTask, options);
     try {
+      const sourceUrl = await getDownloadURL(fileReference);
       await setDoc(doc(this.firestore, target.metadataPath), createMetadataPayload(target.metadata));
+      return { ...target.metadata, sourceUrl };
     } catch (error: unknown) {
       await deleteObject(fileReference).catch(() => undefined);
       throw error;
     }
-    return target.metadata;
+  }
+
+  async rename(input: MaterialRenameInput, user: AuthUser | null | undefined): Promise<void> {
+    if (!user) throw new Error("login is required to rename material");
+    const validation = validateMaterialDisplayName(input.displayName);
+    if (!validation.ok) throw new Error(validation.message);
+    const metadataPath = noteMaterialDocumentPath({ childId: input.id, noteId: input.noteId, uid: user.uid });
+    await updateDoc(doc(this.firestore, metadataPath), { displayName: validation.displayName });
   }
 }
